@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, Book, ShieldAlert } from 'lucide-react';
+import { Book, ShieldAlert, Search } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../lib/utils';
 
 export default function RulesLibrary() {
   const [rules, setRules] = useState([]);
@@ -9,7 +10,7 @@ export default function RulesLibrary() {
   useEffect(() => {
     const fetchRules = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/rules');
+        const res = await axios.get(`${API_URL}/api/rules`);
         setRules(res.data);
       } catch (err) {
         console.error("Failed to fetch rules", err);

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, Search, Trash2, ChevronRight, Eye } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../lib/utils';
 
 export default function History() {
   const [history, setHistory] = useState([]);
@@ -10,7 +11,7 @@ export default function History() {
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/history');
+      const res = await axios.get(`${API_URL}/api/history`);
       setHistory(res.data);
     } catch (err) {
       console.error("Failed to fetch history", err);
@@ -26,7 +27,7 @@ export default function History() {
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this scan record?")) {
       try {
-        await axios.delete(`http://localhost:5000/api/history/${id}`);
+        await axios.delete(`${API_URL}/api/history/${id}`);
         fetchHistory(); // Refresh
       } catch (error) {
         console.error("Failed to delete", error);
@@ -90,7 +91,7 @@ export default function History() {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="h-12 w-12 rounded bg-white border border-border flex-shrink-0 flex items-center justify-center overflow-hidden">
-                          <img src={`http://localhost:5000/${scan.imagePath}`} alt="thumb" className="max-h-full max-w-full object-contain" onError={(e) => { e.target.src = 'https://via.placeholder.com/50'; }} />
+                          <img src={`${API_URL}/${scan.imagePath}`} alt="thumb" className="max-h-full max-w-full object-contain" onError={(e) => { e.target.src = 'https://via.placeholder.com/50'; }} />
                         </div>
                         <div className="ml-4">
                           <div className="font-medium text-foreground">{scan.extractedInfo?.productName || 'Unknown Product'}</div>

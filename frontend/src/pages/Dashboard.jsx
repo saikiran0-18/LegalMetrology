@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ShieldCheck, AlertTriangle, XCircle, TrendingUp, Package, ChevronRight, Scan, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import axios from 'axios';
+import { API_URL } from '../lib/utils';
 
 export default function Dashboard() {
   const [history, setHistory] = useState([]);
@@ -18,7 +19,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/history');
+        const res = await axios.get(`${API_URL}/api/history`);
         const data = res.data;
         setHistory(data.slice(0, 5)); // Last 5 scans
         
@@ -242,7 +243,7 @@ export default function Dashboard() {
                   <Link to={`/results/${scan._id}`} key={scan._id} className="block group">
                     <div className="flex items-center p-4 rounded-2xl hover:bg-black/5 transition-colors border border-transparent hover:border-border/50">
                       <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center overflow-hidden mr-4 ring-1 ring-border/50">
-                         <img src={`http://localhost:5000/${scan.imagePath}`} alt="product" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://via.placeholder.com/150'; }} />
+                         <img src={`${API_URL}/${scan.imagePath}`} alt="product" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://via.placeholder.com/150'; }} />
                       </div>
                       <div className="flex-1 overflow-hidden">
                         <h4 className="font-bold text-foreground text-sm truncate">{scan.extractedInfo?.productName || 'Unknown Product'}</h4>

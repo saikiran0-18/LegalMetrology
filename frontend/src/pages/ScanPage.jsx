@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud, FileImage, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import axios from 'axios';
-import { cn } from '../lib/utils';
+import { API_URL, cn } from '../lib/utils';
 
 export default function ScanPage() {
   const [file, setFile] = useState(null);
@@ -70,7 +70,7 @@ export default function ScanPage() {
     formData.append('productImage', file);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/scan', formData, {
+      const response = await axios.post(`${API_URL}/api/scan`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       

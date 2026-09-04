@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, AlertTriangle, XCircle, Download, FileText, ChevronRight, BookOpen, Scan } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertTriangle, XCircle, Download, FileText, BookOpen, Scan } from 'lucide-react';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { cn } from '../lib/utils';
+import { cn, API_URL } from '../lib/utils';
 
 export default function ResultsPage() {
   const { id } = useParams();
@@ -15,7 +15,7 @@ export default function ResultsPage() {
   useEffect(() => {
     const fetchResult = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/history/${id}`);
+        const res = await axios.get(`${API_URL}/api/history/${id}`);
         setScan(res.data);
         if (res.data.ruleResults.length > 0) {
           setActiveRule(res.data.ruleResults[0]);
@@ -135,7 +135,7 @@ export default function ResultsPage() {
         <div className="lg:col-span-1 space-y-6">
           <div className="glass dark:glass-dark bg-card/80 dark:bg-card/30 rounded-3xl p-4 flex justify-center bg-black/5 dark:bg-black/40 border border-border/50 shadow-xl">
             <img 
-              src={`http://localhost:5000/${scan.imagePath}`} 
+              src={`${API_URL}/${scan.imagePath}`} 
               alt="Scanned Product" 
               className="max-h-80 object-contain rounded-xl shadow-2xl ring-1 ring-border/50"
               onError={(e) => { e.target.src = 'https://via.placeholder.com/300'; }}
