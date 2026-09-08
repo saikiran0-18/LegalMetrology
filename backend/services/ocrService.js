@@ -1,11 +1,12 @@
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
+const sharp = require('sharp');
 const { imageSize } = require('image-size');
 
 /**
- * Perform robust multi-pass OCR.
- * Automatically tries full-image and adaptive central region crops
- * to handle tags/labels with white, black, or transparent borders.
+ * Perform robust multi-pass OCR with Sharp image preprocessing.
+ * Preprocessing includes contrast normalization, resizing for optimal DPI,
+ * grayscale conversion, and sharpening to maximize Tesseract character legibility on real packaging.
  */
 const performOCR = async (imagePath) => {
   let worker = null;
@@ -23,12 +24,42 @@ const performOCR = async (imagePath) => {
 
     worker = await Tesseract.createWorker('eng');
 
-    // Pass 1: Full image recognition
-    let res = await worker.recognize(imagePath);
+    // Generate preprocessed image buffer with sharp
+    let preprocessedBuffer = null;
+    try {
+      let pipeline = sharp(imagePath).rotate(); // auto-rotate based on EXIF
+      
+      // Upscale if image is low-res or small to achieve ~300 DPI for legible packaging fonts
+      if (width > 0 && width < 1200) {
+        pipeline = pipeline.resize({ width: 1600, withoutEnlargement: false });
+      }
+
+      preprocessedBuffer = await pipeline
+        .grayscale()
+        .normalize()
+        .sharpen({ sigma: 1.2, m1: 0.5, m2: 2.0 })
+        .png()
+        .toBuffer();
+    } catch (sharpErr) {
+      console.warn('Sharp preprocessing error (falling back to raw):', sharpErr.message);
+    }
+
+    // Pass 1: Recognize preprocessed buffer (or original if sharp failed)
+    const targetInput = preprocessedBuffer || imagePath;
+    let res = await worker.recognize(targetInput);
     let text = (res.data?.text || '').trim();
 
+    // Pass 1b: If preprocessed text is too short, also try raw image
+    if (text.length < 50 && preprocessedBuffer) {
+      const rawRes = await worker.recognize(imagePath);
+      const rawText = (rawRes.data?.text || '').trim();
+      if (rawText.length > text.length) {
+        text = rawText;
+      }
+    }
+
     // Pass 2: Adaptive central crop (common when mobile users capture a vertical tag on a background)
-    if (text.length < 35 && width > 0 && height > 0) {
+    if (text.length < 40 && width > 0 && height > 0) {
       const rect2 = {
         left: Math.round(width * 0.18),
         top: 0,
@@ -43,7 +74,7 @@ const performOCR = async (imagePath) => {
     }
 
     // Pass 3: Tighter central crop if still short
-    if (text.length < 35 && width > 0 && height > 0) {
+    if (text.length < 40 && width > 0 && height > 0) {
       const rect3 = {
         left: Math.round(width * 0.24),
         top: 0,

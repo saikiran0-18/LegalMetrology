@@ -37,6 +37,8 @@ import {
   Info,
   RefreshCw,
   ZoomIn,
+  ZoomOut,
+  RotateCw,
   Search
 } from 'lucide-react';
 import axios from 'axios';
@@ -63,6 +65,56 @@ export default function ResultsPage() {
   const [officerComments, setOfficerComments] = useState('');
   const [isSavingAdjudication, setIsSavingAdjudication] = useState(false);
   const [adjudicationMessage, setAdjudicationMessage] = useState(null);
+
+  // Image Zoom Lightbox Modal State
+  const [zoomModal, setZoomModal] = useState({
+    isOpen: false,
+    imageUrl: '',
+    title: '',
+    scale: 1,
+    rotation: 0
+  });
+
+  const handleOpenZoom = (imageUrl, title = 'Product Packaging Inspection') => {
+    if (!imageUrl) return;
+    setZoomModal({
+      isOpen: true,
+      imageUrl,
+      title,
+      scale: 1,
+      rotation: 0
+    });
+  };
+
+  const handleCloseZoom = () => {
+    setZoomModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const handleZoomIn = () => {
+    setZoomModal(prev => ({ ...prev, scale: Math.min(prev.scale + 0.25, 4) }));
+  };
+
+  const handleZoomOut = () => {
+    setZoomModal(prev => ({ ...prev, scale: Math.max(prev.scale - 0.25, 0.5) }));
+  };
+
+  const handleResetZoom = () => {
+    setZoomModal(prev => ({ ...prev, scale: 1, rotation: 0 }));
+  };
+
+  const handleRotate = () => {
+    setZoomModal(prev => ({ ...prev, rotation: (prev.rotation + 90) % 360 }));
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && zoomModal.isOpen) {
+        handleCloseZoom();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomModal.isOpen]);
 
   // Additional Evidence Upload State
   const [uploadFile, setUploadFile] = useState(null);
@@ -602,26 +654,42 @@ export default function ResultsPage() {
                 <ImageIcon className="w-4 h-4 text-primary" />
                 <span className="text-xs font-bold text-foreground">Package Evidence Canvas</span>
               </div>
-              <button
-                onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                  showBoundingBoxes 
-                    ? 'bg-primary/20 text-primary border border-primary/30' 
-                    : 'bg-black/5 dark:bg-white/5 text-muted-foreground'
-                }`}
-              >
-                {showBoundingBoxes ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                {showBoundingBoxes ? 'Bounding Boxes ON' : 'Boxes Hidden'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Packaging Evidence Canvas')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-black/5 dark:bg-white/5 hover:bg-primary/20 hover:text-primary text-muted-foreground border border-border/40 shadow-sm"
+                  title="Click to zoom image in full screen"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                  Zoom In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    showBoundingBoxes 
+                      ? 'bg-primary/20 text-primary border border-primary/30' 
+                      : 'bg-black/5 dark:bg-white/5 text-muted-foreground'
+                  }`}
+                >
+                  {showBoundingBoxes ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  {showBoundingBoxes ? 'Bounding Boxes ON' : 'Boxes Hidden'}
+                </button>
+              </div>
             </div>
 
             {/* Visual Canvas Container */}
             <div className="relative flex justify-center bg-black/5 dark:bg-black/40 rounded-2xl overflow-hidden p-2 min-h-[320px] items-center">
-              <div className="relative inline-block max-w-full">
+              <div 
+                className="relative inline-block max-w-full cursor-zoom-in group"
+                onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Packaging Evidence Canvas')}
+                title="Click image to zoom in"
+              >
                 <img 
                   src={getImageUrl(scan.imagePath)} 
                   alt="Scanned Product Packaging" 
-                  className="max-h-96 w-auto object-contain rounded-xl shadow-lg ring-1 ring-border/40 select-none pointer-events-none"
+                  className="max-h-96 w-auto object-contain rounded-xl shadow-lg ring-1 ring-border/40 select-none transition-transform duration-200 group-hover:scale-[1.01]"
                   onError={(e) => {
                     const filename = scan.imagePath ? scan.imagePath.split(/[\/\\]/).pop() : '';
                     if (filename && !e.target.dataset.triedRelative) {
@@ -636,6 +704,11 @@ export default function ResultsPage() {
                     }
                   }}
                 />
+
+                {/* Floating Click to Zoom badge on hover */}
+                <div className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/75 text-white text-[10px] font-bold backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 pointer-events-none shadow-md">
+                  <ZoomIn className="w-3 h-3 text-primary" /> Click to Zoom
+                </div>
 
                 {/* Overlaid Interactive Bounding Boxes: Statutory Mode */}
                 {showBoundingBoxes && activeMainTab === 'statutory' && scan.ruleResults?.map((ruleItem) => {
@@ -652,7 +725,10 @@ export default function ResultsPage() {
                   return (
                     <div
                       key={ruleItem.ruleId}
-                      onClick={() => setActiveRule(ruleItem)}
+                      onClick={(e) => {
+                        e.stopPropagation(); // prevent triggering image zoom when clicking bounding box
+                        setActiveRule(ruleItem);
+                      }}
                       style={{
                         left: `${region.x}%`,
                         top: `${region.y}%`,
@@ -1019,12 +1095,21 @@ export default function ResultsPage() {
 
                     <div className="flex flex-col sm:flex-row items-center gap-4 bg-background/80 p-3 rounded-xl border border-border/40">
                       {activeRule.croppedEvidenceUrl ? (
-                        <img
-                          src={getImageUrl(activeRule.croppedEvidenceUrl)}
-                          alt="Cropped Evidence"
-                          className="h-24 w-auto max-w-[160px] object-cover rounded-lg border border-border/60 shadow-sm"
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
+                        <div 
+                          className="relative cursor-zoom-in group/crop shrink-0"
+                          onClick={() => handleOpenZoom(getImageUrl(activeRule.croppedEvidenceUrl), `${activeRule.ruleNumber || 'Rule'} Cropped Evidence`)}
+                          title="Click to zoom evidence image"
+                        >
+                          <img
+                            src={getImageUrl(activeRule.croppedEvidenceUrl)}
+                            alt="Cropped Evidence"
+                            className="h-24 w-auto max-w-[160px] object-cover rounded-lg border border-border/60 shadow-sm transition-transform duration-150 group-hover/crop:scale-105"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/crop:opacity-100 transition-opacity rounded-lg flex items-center justify-center pointer-events-none">
+                            <ZoomIn className="w-5 h-5 text-white drop-shadow-md" />
+                          </div>
+                        </div>
                       ) : (
                         <div className="h-20 w-36 bg-black/10 dark:bg-white/10 rounded-lg flex items-center justify-center text-[10px] text-muted-foreground">
                           Area Highlighted
@@ -1047,61 +1132,80 @@ export default function ResultsPage() {
                     </div>
                   </div>
 
-                  {/* Officer Adjudication Actions: Accept / Reject */}
-                  <div className="p-4 rounded-2xl border border-primary/30 bg-primary/5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                        <UserCheck className="w-4 h-4 text-primary" />
-                        Officer Legal Adjudication
-                      </span>
-                      
-                      <span className={cn(
-                        "px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider",
-                        activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' ? "bg-rose-600 text-white" :
-                        activeRule.officerVerificationStatus === 'OFFICER_REJECTED' ? "bg-zinc-600 text-white" :
-                        "bg-amber-500 text-black font-extrabold"
-                      )}>
-                        {activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' ? 'Officer Verified' :
-                         activeRule.officerVerificationStatus === 'OFFICER_REJECTED' ? 'Officer Rejected' : 'AI Detected'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        onClick={() => handleAdjudicate('OFFICER_VERIFIED')}
-                        disabled={isSavingAdjudication}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
-                          activeRule.officerVerificationStatus === 'OFFICER_VERIFIED'
-                            ? 'bg-rose-600 text-white ring-2 ring-rose-600/40'
-                            : 'bg-black/5 dark:bg-white/5 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-500/40'
-                        }`}
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Accept as Legal Violation
-                      </button>
-
-                      <button
-                        onClick={() => handleAdjudicate('OFFICER_REJECTED')}
-                        disabled={isSavingAdjudication}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
-                          activeRule.officerVerificationStatus === 'OFFICER_REJECTED'
-                            ? 'bg-zinc-700 text-white ring-2 ring-zinc-500/40'
-                            : 'bg-black/5 dark:bg-white/5 hover:bg-zinc-700 hover:text-white text-muted-foreground border border-border/60'
-                        }`}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        Reject / Dismiss Anomaly
-                      </button>
-                    </div>
-
-                    {adjudicationMessage && (
-                      <div className={`p-2 rounded-lg text-xs font-semibold ${
-                        adjudicationMessage.type === 'success' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-600'
-                      }`}>
-                        {adjudicationMessage.text}
+                  {/* Officer Adjudication Actions: Accept / Reject (only shown for non-pass rules) */}
+                  {activeRule.status !== 'PASS' ? (
+                    <div className="p-4 rounded-2xl border border-primary/30 bg-primary/5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                          <UserCheck className="w-4 h-4 text-primary" />
+                          Officer Legal Adjudication
+                        </span>
+                        
+                        <span className={cn(
+                          "px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider",
+                          activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' ? "bg-rose-600 text-white" :
+                          activeRule.officerVerificationStatus === 'OFFICER_REJECTED' ? "bg-zinc-600 text-white" :
+                          "bg-amber-500 text-black font-extrabold"
+                        )}>
+                          {activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' ? 'Officer Verified' :
+                           activeRule.officerVerificationStatus === 'OFFICER_REJECTED' ? 'Officer Rejected' : 'AI Detected'}
+                        </span>
                       </div>
-                    )}
-                  </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleAdjudicate('OFFICER_VERIFIED')}
+                          disabled={isSavingAdjudication}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
+                            activeRule.officerVerificationStatus === 'OFFICER_VERIFIED'
+                              ? 'bg-rose-600 text-white ring-2 ring-rose-600/40'
+                              : 'bg-black/5 dark:bg-white/5 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-500/40'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Accept as Legal Violation
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAdjudicate('OFFICER_REJECTED')}
+                          disabled={isSavingAdjudication}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
+                            activeRule.officerVerificationStatus === 'OFFICER_REJECTED'
+                              ? 'bg-zinc-700 text-white ring-2 ring-zinc-500/40'
+                              : 'bg-black/5 dark:bg-white/5 hover:bg-zinc-700 hover:text-white text-muted-foreground border border-border/60'
+                          }`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Reject / Dismiss Anomaly
+                        </button>
+                      </div>
+
+                      {adjudicationMessage && (
+                        <div className={`p-2 rounded-lg text-xs font-semibold ${
+                          adjudicationMessage.type === 'success' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-600'
+                        }`}>
+                          {adjudicationMessage.text}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-start gap-3 shadow-sm">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
+                          Compliant Statutory Declaration
+                          <span className="text-[10px] px-2 py-0.2 rounded-full font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                            PASS
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-800/80 dark:text-emerald-200/80 mt-1 leading-relaxed">
+                          This mandatory declaration satisfies all statutory Legal Metrology requirements. No officer violation adjudication required.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Edit Extracted Text & Change Category */}
                   <div className="space-y-3 text-xs">
@@ -1798,6 +1902,128 @@ export default function ResultsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive High-Resolution Image Zoom Lightbox Modal */}
+      {zoomModal.isOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col animate-in fade-in duration-200 select-none"
+          onClick={handleCloseZoom}
+        >
+          {/* Top Control Bar */}
+          <div 
+            className="flex items-center justify-between px-6 py-4 bg-black/60 border-b border-white/10 text-white z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <ImageIcon className="w-5 h-5 text-primary" />
+              <div>
+                <h3 className="text-sm font-bold text-white leading-tight">
+                  {zoomModal.title}
+                </h3>
+                <p className="text-[11px] text-white/60">
+                  Use zoom controls or drag to inspect packaging declarations and fine print
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Zoom Out */}
+              <button
+                type="button"
+                onClick={handleZoomOut}
+                disabled={zoomModal.scale <= 0.5}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white disabled:opacity-40 transition-colors"
+                title="Zoom Out (-)"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+
+              {/* Zoom Scale Badge */}
+              <span className="px-3 py-1 rounded-xl bg-white/10 text-xs font-mono font-bold text-white min-w-[56px] text-center">
+                {Math.round(zoomModal.scale * 100)}%
+              </span>
+
+              {/* Zoom In */}
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                disabled={zoomModal.scale >= 4}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white disabled:opacity-40 transition-colors"
+                title="Zoom In (+)"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+
+              {/* Rotate */}
+              <button
+                type="button"
+                onClick={handleRotate}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+                title="Rotate Clockwise (90°)"
+              >
+                <RotateCw className="w-4 h-4" />
+              </button>
+
+              {/* Reset Zoom */}
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-colors flex items-center gap-1"
+                title="Reset to 100%"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Reset
+              </button>
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={handleCloseZoom}
+                className="p-2 ml-2 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white transition-colors"
+                title="Close Lightbox (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Zoomable Viewport */}
+          <div 
+            className="flex-1 overflow-auto flex items-center justify-center p-6 cursor-grab active:cursor-grabbing"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                handleCloseZoom();
+              }
+            }}
+          >
+            <div 
+              className="relative transition-transform duration-200 ease-out origin-center"
+              style={{
+                transform: `scale(${zoomModal.scale}) rotate(${zoomModal.rotation}deg)`
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={zoomModal.imageUrl}
+                alt={zoomModal.title}
+                className="max-w-[85vw] max-h-[75vh] object-contain rounded-xl shadow-2xl ring-1 ring-white/20"
+                onError={(e) => {
+                  const filename = zoomModal.imageUrl ? zoomModal.imageUrl.split(/[\/\\]/).pop() : '';
+                  if (filename && !e.target.dataset.triedFallback) {
+                    e.target.dataset.triedFallback = 'true';
+                    e.target.src = `/uploads/${filename}`;
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Bottom Hint */}
+          <div className="px-6 py-2.5 bg-black/60 border-t border-white/10 text-center text-[11px] text-white/60">
+            Tip: Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px] text-white">Esc</kbd> to close &bull; Click + / - to zoom up to 400%
           </div>
         </div>
       )}
