@@ -254,7 +254,7 @@ export default function ResultsPage() {
   };
 
   // Handle Officer Adjudication (Accept, Reject, Edit Text, Change Category, Add Comments)
-  const handleAdjudicate = async (newStatus) => {
+  const handleAdjudicate = async (newVerificationStatus, newRuleStatus = 'PASS') => {
     if (!activeRule) return;
 
     setIsSavingAdjudication(true);
@@ -262,7 +262,8 @@ export default function ResultsPage() {
 
     try {
       const payload = {
-        officerVerificationStatus: newStatus || activeRule.officerVerificationStatus || 'AI_DETECTED',
+        officerVerificationStatus: newVerificationStatus || activeRule.officerVerificationStatus || 'OFFICER_VERIFIED',
+        status: newRuleStatus,
         officerComments: officerComments,
         extractedText: editedText,
         violationCategory: selectedCategory
@@ -276,7 +277,9 @@ export default function ResultsPage() {
         setActiveRule(res.data.updatedEvidence);
         setAdjudicationMessage({
           type: 'success',
-          text: `Evidence adjudicated as ${newStatus === 'OFFICER_VERIFIED' ? 'Officer Verified' : newStatus === 'OFFICER_REJECTED' ? 'Officer Rejected' : 'Updated'}.`
+          text: newRuleStatus === 'PASS'
+            ? `Accepted! Rule status updated to PASS (Green Tick). Compliance Score increased to ${res.data.scan.score}%.`
+            : `Statutory violation confirmed. Compliance Score: ${res.data.scan.score}%.`
         });
       }
     } catch (err) {
@@ -786,6 +789,7 @@ export default function ResultsPage() {
                       className={cn(
                         "absolute rounded-lg border-2 cursor-pointer transition-all duration-300 z-10 group",
                         isSelected ? "ring-4 ring-primary shadow-xl scale-[1.02] z-20" : "hover:scale-[1.01]",
+                        ruleItem.status === 'PASS' ? "border-emerald-500 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.3)]" :
                         isVerified ? "border-rose-600 bg-rose-600/25 shadow-[0_0_15px_rgba(225,29,72,0.3)]" :
                         isRejected ? "border-zinc-500/60 bg-zinc-500/10 opacity-50 border-dashed" :
                         "border-amber-500 bg-amber-500/20 border-dashed animate-pulse"
@@ -793,11 +797,12 @@ export default function ResultsPage() {
                     >
                       <span className={cn(
                         "absolute -top-3 left-1 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm uppercase tracking-wider flex items-center gap-1",
+                        ruleItem.status === 'PASS' ? "bg-emerald-600 text-white" :
                         isVerified ? "bg-rose-600 text-white" :
                         isRejected ? "bg-zinc-600 text-zinc-200" :
                         "bg-amber-500 text-black font-extrabold"
                       )}>
-                        {isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : 'AI SUSPECTED'}
+                        {ruleItem.status === 'PASS' ? 'VERIFIED PASS' : isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : 'AI SUSPECTED'}
                         <span className="opacity-90">• {ruleItem.ruleNumber || ruleItem.ruleId}</span>
                       </span>
                     </div>
@@ -1068,7 +1073,7 @@ export default function ResultsPage() {
                           </span>
                           
                           {/* Verification badge */}
-                          {isNonPass && (
+                          {isNonPass ? (
                             <span className={cn(
                               "text-[9px] px-1.5 py-0.2 rounded font-black uppercase",
                               isVerified ? "bg-rose-500/20 text-rose-600 dark:text-rose-400" :
@@ -1077,7 +1082,11 @@ export default function ResultsPage() {
                             )}>
                               {isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : 'AI DETECTED'}
                             </span>
-                          )}
+                          ) : isVerified ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded font-black uppercase bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                              VERIFIED
+                            </span>
+                          ) : null}
                         </div>
 
                         <h4 className={cn("text-xs font-bold leading-tight line-clamp-1", isSelected ? "text-foreground" : "text-foreground/80")}>
@@ -1190,7 +1199,7 @@ export default function ResultsPage() {
                         
                         <span className={cn(
                           "px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider",
-                          activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' ? "bg-rose-600 text-white" :
+                          activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' ? "bg-emerald-600 text-white" :
                           activeRule.officerVerificationStatus === 'OFFICER_REJECTED' ? "bg-zinc-600 text-white" :
                           "bg-amber-500 text-black font-extrabold"
                         )}>
@@ -1199,58 +1208,78 @@ export default function ResultsPage() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => handleAdjudicate('OFFICER_VERIFIED')}
+                          onClick={() => handleAdjudicate('OFFICER_VERIFIED', 'PASS')}
                           disabled={isSavingAdjudication}
-                          className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
-                            activeRule.officerVerificationStatus === 'OFFICER_VERIFIED'
-                              ? 'bg-rose-600 text-white ring-2 ring-rose-600/40'
-                              : 'bg-black/5 dark:bg-white/5 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-500/40'
-                          }`}
+                          className="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-600/30"
                         >
-                          <Check className="w-3.5 h-3.5" />
-                          Accept as Legal Violation
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                          Accept as Legal Violation (Turn Green & Pass)
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => handleAdjudicate('OFFICER_REJECTED')}
+                          onClick={() => handleAdjudicate('OFFICER_REJECTED', 'PASS')}
                           disabled={isSavingAdjudication}
-                          className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
-                            activeRule.officerVerificationStatus === 'OFFICER_REJECTED'
-                              ? 'bg-zinc-700 text-white ring-2 ring-zinc-500/40'
-                              : 'bg-black/5 dark:bg-white/5 hover:bg-zinc-700 hover:text-white text-muted-foreground border border-border/60'
-                          }`}
+                          className="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm bg-black/5 dark:bg-white/5 hover:bg-emerald-600 hover:text-white text-muted-foreground border border-border/60"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <Check className="w-3.5 h-3.5" />
                           Reject / Dismiss Anomaly
                         </button>
                       </div>
 
+                      <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground border-t border-border/30">
+                        <span>Confirm as genuine violation instead:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleAdjudicate('OFFICER_VERIFIED', 'FAIL')}
+                          disabled={isSavingAdjudication}
+                          className="text-rose-500 hover:text-rose-600 hover:underline font-bold flex items-center gap-1"
+                        >
+                          <AlertOctagon className="w-3.5 h-3.5" />
+                          Confirm Statutory Violation (Keep FAIL)
+                        </button>
+                      </div>
+
                       {adjudicationMessage && (
-                        <div className={`p-2 rounded-lg text-xs font-semibold ${
-                          adjudicationMessage.type === 'success' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-600'
+                        <div className={`p-2.5 rounded-xl text-xs font-bold ${
+                          adjudicationMessage.type === 'success' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
                         }`}>
                           {adjudicationMessage.text}
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-start gap-3 shadow-sm">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="text-xs font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
-                          Compliant Statutory Declaration
-                          <span className="text-[10px] px-2 py-0.2 rounded-full font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                            PASS
-                          </span>
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-start justify-between gap-3 shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="text-xs font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
+                            Compliant Statutory Declaration
+                            <span className="text-[10px] px-2 py-0.2 rounded-full font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                              PASS
+                            </span>
+                            {activeRule.officerVerificationStatus === 'OFFICER_VERIFIED' && (
+                              <span className="text-[10px] px-2 py-0.2 rounded-full font-bold bg-emerald-600 text-white">
+                                Officer Approved
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-emerald-800/80 dark:text-emerald-200/80 mt-1 leading-relaxed">
+                            This mandatory declaration satisfies statutory Legal Metrology requirements and has been verified compliant. Compliance score has been credited.
+                          </p>
                         </div>
-                        <p className="text-[11px] text-emerald-800/80 dark:text-emerald-200/80 mt-1 leading-relaxed">
-                          This mandatory declaration satisfies all statutory Legal Metrology requirements. No officer violation adjudication required.
-                        </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAdjudicate('AI_DETECTED', 'FAIL')}
+                        className="text-[11px] font-bold text-muted-foreground hover:text-rose-500 shrink-0 underline decoration-dotted transition-colors"
+                        title="Re-open adjudication for this rule"
+                      >
+                        Re-evaluate
+                      </button>
                     </div>
                   )}
 

@@ -185,12 +185,47 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Helper to dynamically recalculate compliance score and risk level
+const recalculateScanScore = (ruleResults) => {
+  let totalWeight = 0;
+  let deductions = 0;
+  let highSeverityFails = 0;
+  let mediumSeverityWarnings = 0;
+
+  for (const result of ruleResults) {
+    const weight = result.weight || (result.severity === 'HIGH' ? 25 : result.severity === 'MEDIUM' ? 15 : 10);
+    totalWeight += weight;
+
+    if (result.status === 'FAIL') {
+      deductions += weight;
+      if (result.severity === 'HIGH') {
+        highSeverityFails++;
+      }
+    } else if (result.status === 'WARNING') {
+      deductions += weight * 0.4;
+      mediumSeverityWarnings++;
+    }
+  }
+
+  const score = totalWeight > 0 ? Math.max(0, Math.round(((totalWeight - deductions) / totalWeight) * 100)) : 100;
+
+  let riskLevel = 'LOW';
+  if (highSeverityFails >= 2 || score < 60) {
+    riskLevel = 'HIGH';
+  } else if (highSeverityFails === 1 || mediumSeverityWarnings >= 2 || score < 85) {
+    riskLevel = 'MEDIUM';
+  }
+
+  return { score, riskLevel };
+};
+
 // 3. Officer Adjudication: Accept, Reject, Edit Text, Change Category, Add Comments
 router.put('/:id/evidence/:evidenceId', requireAuth, async (req, res) => {
   try {
     const { id, evidenceId } = req.params;
     const {
       officerVerificationStatus, // 'OFFICER_VERIFIED' | 'OFFICER_REJECTED' | 'AI_DETECTED'
+      status,                    // 'PASS' | 'FAIL' | 'WARNING'
       officerComments,
       extractedText,
       violationCategory,
@@ -207,6 +242,14 @@ router.put('/:id/evidence/:evidenceId', requireAuth, async (req, res) => {
       item.officerVerificationStatus = officerVerificationStatus;
       item.verifiedBy = req.user?.name || 'Inspector Officer';
       item.verifiedAt = new Date();
+    }
+
+    // Update rule status when officer adjudicates
+    if (status) {
+      item.status = status;
+    } else if (officerVerificationStatus === 'OFFICER_VERIFIED' || officerVerificationStatus === 'OFFICER_REJECTED') {
+      // When accepted by officer, set to PASS so tick turns green and score increases
+      item.status = 'PASS';
     }
 
     if (typeof officerComments === 'string') {
@@ -231,6 +274,11 @@ router.put('/:id/evidence/:evidenceId', requireAuth, async (req, res) => {
       };
     }
 
+    // Dynamically recalculate score and risk level
+    const { score, riskLevel } = recalculateScanScore(scan.ruleResults);
+    scan.score = score;
+    scan.riskLevel = riskLevel;
+
     scan.legalEnforcementStatus = calculateLegalStatus(scan.ruleResults);
     scan.officerReviewedAt = new Date();
     scan.officerReviewedBy = req.user?.name || 'Inspector Officer';
@@ -239,7 +287,7 @@ router.put('/:id/evidence/:evidenceId', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      message: `Violation evidence ${evidenceId} updated successfully.`,
+      message: `Violation evidence ${evidenceId} updated successfully. Status: ${item.status}, Score: ${scan.score}%.`,
       scan,
       updatedEvidence: item
     });
