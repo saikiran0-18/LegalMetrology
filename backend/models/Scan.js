@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 
 const scanSchema = new mongoose.Schema({
   productId: { type: String, required: false },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+  inspectorName: { type: String, default: 'Officer' },
   imagePath: { type: String, required: true },
   extractedText: { type: String, required: false },
   extractedInfo: {

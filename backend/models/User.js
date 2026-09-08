@@ -1,9 +1,16 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['Inspector', 'Manufacturer', 'Admin'], default: 'Inspector' },
+  googleId: { type: String, sparse: true, unique: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  name: { type: String, required: true, trim: true },
+  avatar: { type: String, default: '' },
+  role: { 
+    type: String, 
+    enum: ['Inspector', 'Officer', 'Admin', 'Manufacturer'], 
+    default: 'Inspector' 
+  },
+  passwordHash: { type: String }, // Optional for Google OAuth accounts
   createdAt: { type: Date, default: Date.now }
 });
 

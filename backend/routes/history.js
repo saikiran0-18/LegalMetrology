@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Scan = require('../models/Scan');
+const { requireAuth } = require('../middleware/auth');
+
+// Protect all history endpoints
+router.use(requireAuth);
 
 // Get all scans
 router.get('/', async (req, res) => {
