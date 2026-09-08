@@ -31,7 +31,7 @@ module.exports = {
     }
 
     // Check for valid metric units
-    const validMetric = /\b(g|gm|gms|gram|grams|kg|kgs|kilogram|kilograms|ml|mls|millilitre|milliliter|l|ltr|litre|liter|m|meter|cm|mm|n|u|pcs?|units?)\b/i;
+    const validMetric = /\b(g|gm|gms|gram|grams|kg|kgs|kilogram|kilograms|ml|mls|millilitre|milliliter|l|ltr|litre|liter|m|meter|cm|mm|n|u|pcs?|units?|numbers?|no\.?|nos\.?)\b/i;
     if (validMetric.test(qty)) {
       return {
         id: 'RULE-13',

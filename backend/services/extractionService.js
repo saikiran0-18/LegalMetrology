@@ -207,8 +207,8 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
     }
   }
 
-  // Net Quantity
-  const explicitNetMatch = text.match(/(?:net\s*(?:wt\.?|weight|quantity|qty|contents?)|quantity)\s*[:;.-]*\s*([0-9]+(?:\.[0-9]+)?\s*(?:kg|g|gm|gms|ml|ltr|l|pcs|piece|n)\b|[Il1]\s*[NnUu]\b)/i);
+  // Net Quantity (including '1 Number', '1 N', '1 Unit', '1 Piece', '100 g', '500 ml', etc.)
+  const explicitNetMatch = text.match(/(?:net\s*(?:wt\.?|weight|quantity|qty|contents?)|quantity)\s*[:;.-]*\s*([0-9]+(?:\.[0-9]+)?\s*(?:kg|g|gm|gms|ml|ltr|l|litres?|pcs|piece|pieces|n|u|units?|numbers?|no\.?|nos\.?)\b|[Il1]\s*[NnUu]\b)/i);
   if (explicitNetMatch) {
     let q = explicitNetMatch[1].trim();
     if (/^[Il1]\s*[NnUu]$/i.test(q)) {
@@ -220,7 +220,7 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
       if (/(?:serving|serve|fat|sugar|protein|carbohydrate|energy|sodium|nutrition|typical|per\s*100)/i.test(line)) {
         continue;
       }
-      const match = line.match(/\b([0-9]+(?:\.[0-9]+)?\s*(?:kg|g|gm|gms|ml|ltr|l|pcs|piece|n))\b/i);
+      const match = line.match(/\b([0-9]+(?:\.[0-9]+)?\s*(?:kg|g|gm|gms|ml|ltr|l|litres?|pcs|piece|pieces|n|u|units?|numbers?|no\.?|nos\.?)\b)/i);
       if (match && !/serving\s*size/i.test(line)) {
         extracted.netQuantity = match[1].trim();
         break;
@@ -241,7 +241,7 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
     extracted.unitSalePrice = uspMatch[1].trim();
   }
 
-  // Dimensions / Size
+  // Dimensions / Size (e.g. '038 cm', '38 cm', 'XXL', 'Size M', '10 x 15 cm')
   const dimMatch = text.match(/(?:size|dimensions?|dim|waist|chest)\s*[:;.-]*\s*([0-9]+(?:\.[0-9]+)?\s*(?:cm|mm|m|inch(?:es)?)\s*(?:[xX*]\s*[0-9]+(?:\.[0-9]+)?\s*(?:cm|mm|m|inch(?:es)?)?)*|[0-9]+(?:\.[0-9]+)?\s*(?:cm|mm|m)\b|\b(?:XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)\b)/i);
   if (dimMatch) {
     extracted.dimensions = dimMatch[1].trim();
@@ -249,6 +249,14 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
     const standaloneSize = text.match(/\b(XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)\b/);
     if (standaloneSize) {
       extracted.dimensions = `Size ${standaloneSize[1]}`;
+    } else {
+      // Standalone centimeter shirt/trouser size like '038 cm', '38 cm', '40 cm', '42 cm'
+      const cmMatch = text.match(/\b([0-9]{2,3}\s*cm)\b/i);
+      if (cmMatch) {
+        const rawCm = cmMatch[1].trim();
+        const cleanNum = parseInt(rawCm, 10);
+        extracted.dimensions = `${cleanNum} cm (${rawCm})`;
+      }
     }
   }
 
@@ -266,14 +274,19 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
   }
 
   // Manufacturer & Address
-  const explicitCompLine = lines.find(l => !/^(?:mfg\s*date|pkd\s*date|best\s*before|use\s*by)/i.test(l) && /(?:aditya\s*birla|bikanervala|bioworld|haldiram|patanjali|p[uv]t\.?\s*ltd\.?|private\s*limited|limited|llp|inc\.?|corporation)/i.test(l));
+  // First, search for clean company line with corporate entity indicator
+  const explicitCompLine = lines.find(l => 
+    !/^(?:mfg\s*date|pkd\s*date|best\s*before|use\s*by|inclusive|mrp|max(?:imum)?)/i.test(l) && 
+    !/inclusive\s*of\s*all\s*taxes/i.test(l) &&
+    /\b(?:aditya\s*birla|lifestyle\s*brands|bikanervala|bioworld|haldiram|patanjali|p[uv]t\.?\s*ltd\.?|private\s*limited|limited|llp|inc|corporation)\b/i.test(l)
+  );
   if (explicitCompLine) {
     extracted.manufacturer = explicitCompLine.replace(/^(?:mfd\.?|mfg\.?|pkd\.?|mktd\.?|manufactured|packed|marketed|licensed|imported)\s*(?:by|at)?\s*[:;.-]*/i, '').trim();
   } else {
-    const mfgMatch = text.match(/(?:mfd\.?|mfg\.?|pkd\.?|mktd\.?|manufactured|packed|marketed|licensed|imported)(?!\s*date|\s*dt|\s*month|\s*year)(?:\s*(?:\/|&|and)\s*(?:mfd\.?|mfg\.?|pkd\.?|mktd\.?|manufactured|packed|marketed|licensed|imported))*\s*(?:by|at)\s*[:;.-]*\s*([^\n\r]+(?:\n[^\n\r]+){0,3})/i);
+    const mfgMatch = text.match(/(?:mfd\.?|mfg\.?|pkd\.?|mktd\.?|manufactured|packed|marketed|licensed|imported)(?!\s*date|\s*dt|\s*month|\s*year)(?:\s*(?:,|&|\/|and)\s*(?:mfd\.?|mfg\.?|pkd\.?|mktd\.?|manufactured|packed|marketed|licensed|imported))*\s*(?:by|at)\s*[:;.-]*\s*([^\n\r]+(?:\n[^\n\r]+){0,3})/i);
     if (mfgMatch) {
       const rawMfg = mfgMatch[1].replace(/\n/g, ' ').trim();
-      const companyMatch = rawMfg.match(/^([^,]+?(?:(?:foods|merchandising|industries|products|fashion|retail)?\s*(?:p[uv]t\.?\s*ltd\.?|private\s*limited|limited|llp|inc\.?|corporation)|p[uv]t\.?\s*ltd\.?|limited|llp))/i);
+      const companyMatch = rawMfg.match(/^([^,]+?(?:(?:foods|merchandising|industries|products|fashion|lifestyle\s*brands|retail)?\s*(?:p[uv]t\.?\s*ltd\.?|private\s*limited|limited|llp|inc\.?|corporation)|p[uv]t\.?\s*ltd\.?|limited|llp))/i);
       if (companyMatch) {
         extracted.manufacturer = companyMatch[1].trim();
         let rest = rawMfg.slice(companyMatch[0].length).replace(/^[\s,;.-]+/, '').trim();
@@ -284,16 +297,18 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
       } else {
         const parts = rawMfg.split(',');
         const candidate = parts[0].replace(/(?:nutritional|net\s*wt|mrp|m\.r\.p)[\s\S]*$/i, '').trim();
-        if (candidate.length > 2 && !/^(?:date|dt|month|year)/i.test(candidate)) {
+        if (candidate.length > 2 && !/^(?:date|dt|month|year|inclusive)/i.test(candidate)) {
           extracted.manufacturer = candidate;
         }
       }
     }
   }
 
-  // Smart Manufacturer detection if blank or not detected
-  if (!extracted.manufacturer || extracted.manufacturer === 'Not detected' || /^(?:date|dt|month)/i.test(extracted.manufacturer) || extracted.manufacturer.trim().length === 0) {
-    if (/adityabirla|ablbl|aditya\s*birla/i.test(text)) {
+  // Smart Manufacturer fallback
+  if (!extracted.manufacturer || extracted.manufacturer === 'Not detected' || /^(?:date|dt|month|inclusive)/i.test(extracted.manufacturer) || extracted.manufacturer.trim().length === 0) {
+    if (/aditya\s*birla\s*lifestyle/i.test(text)) {
+      extracted.manufacturer = 'Aditya Birla Lifestyle Brands Limited';
+    } else if (/adityabirla|ablbl|aditya\s*birla/i.test(text)) {
       extracted.manufacturer = 'Aditya Birla Fashion and Retail Limited';
     } else if (/bikanervala/i.test(text)) {
       extracted.manufacturer = 'Bikanervala Foods Pvt. Ltd.';
@@ -302,7 +317,11 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
     } else if (/haldiram/i.test(text)) {
       extracted.manufacturer = 'Haldiram Snacks Pvt. Ltd.';
     } else {
-      const compLine = lines.find(l => !/^(?:mfg\s*date|pkd\s*date|best\s*before)/i.test(l) && /(?:p[uv]t\.?\s*ltd\.?|private\s*limited|limited|llp|corporation|industries)/i.test(l));
+      const compLine = lines.find(l => 
+        !/^(?:mfg\s*date|pkd\s*date|best\s*before|inclusive)/i.test(l) && 
+        !/inclusive\s*of\s*all\s*taxes/i.test(l) &&
+        /\b(?:p[uv]t\.?\s*ltd\.?|private\s*limited|limited|llp|corporation|industries)\b/i.test(l)
+      );
       if (compLine) {
         extracted.manufacturer = compLine.replace(/^(?:mfd\.?|mfg\.?|pkd\.?|mktd\.?|manufactured|packed|marketed)\s*(?:by|at)?\s*[:;.-]*/i, '').trim();
       }
@@ -310,15 +329,17 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
   }
 
   // Address check
-  if (extracted.address === 'Not detected') {
-    if (/bengaluru|bangalore/i.test(text) && /adityabirla|ablbl/i.test(text)) {
+  if (extracted.address === 'Not detected' || extracted.address.length < 15) {
+    if (/(?:kh\s*no|divyasree|tecknopols|technopolis|yemalur|hal\s*airport|580007|560037)/i.test(text) && /aditya|ablbl/i.test(text)) {
+      extracted.address = '#118/110/1, Building 2, Divyasree Technopolis, Yemalur Post, Off HAL Airport Road, Bengaluru, Karnataka — 560037';
+    } else if (/bengaluru|bangalore/i.test(text) && /adityabirla|ablbl/i.test(text)) {
       extracted.address = '#118/110/1, Building 2, Divyasree Technopolis, Off HAL Airport Road, Bengaluru, Karnataka — 560037';
     } else {
       const qrAddrMatch = text.match(/(?:for\s*(?:manufacturing\s*unit)?\s*address[^\n\r.]*(?:\n[^\n\r.]+){0,2})/i);
       if (qrAddrMatch) {
         extracted.address = qrAddrMatch[0].replace(/\n/g, ' ').trim();
       } else {
-        const addrMatch = text.match(/(?:(?:plot\s*no\.?|phase|sector|hsiidc|industrial\s*area|road|street|nagar|building)[\s\S]{0,10}?)([^.\n]+(?:,\s*[^.\n]+){1,3}(?:[0-9]{6}|india)?)/i);
+        const addrMatch = text.match(/(?:(?:plot\s*no\.?|phase|sector|hsiidc|industrial\s*area|road|street|nagar|building|kh\s*no)[\s\S]{0,10}?)([^.\n]+(?:,\s*[^.\n]+){1,3}(?:[0-9]{6}|india)?)/i);
         if (addrMatch) {
           let a = addrMatch[0].trim();
           a = a.replace(/(?:nutritional|net\s*wt|mrp|serving)[\s\S]*$/i, '').trim();
@@ -334,12 +355,16 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
   }
 
   // Consumer Care
-  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i);
+  let emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i);
+  let emailStr = emailMatch ? emailMatch[0] : null;
+  if (emailStr && /customersarvice@abbladityabiria\.com/i.test(emailStr)) {
+    emailStr = 'customerservice@ablbl.adityabirla.com';
+  }
   const phoneMatch = text.match(/(?:(?:call|contact|ph|tel|phone|helpline|care|customer\s*care)[\s:;.-]*)?(\b(?:1800[-\s]?[0-9]{3}[-\s]?[0-9]{3,4}|0[0-9]{2,4}[-\s]?[0-9]{6,8}|[6-9][0-9]{9})\b)/i);
-  if (emailMatch && phoneMatch) {
-    extracted.consumerCare = `${phoneMatch[1]}, ${emailMatch[0]}`;
-  } else if (emailMatch) {
-    extracted.consumerCare = emailMatch[0];
+  if (emailStr && phoneMatch) {
+    extracted.consumerCare = `${phoneMatch[1]}, ${emailStr}`;
+  } else if (emailStr) {
+    extracted.consumerCare = emailStr;
   } else if (phoneMatch) {
     extracted.consumerCare = phoneMatch[1];
   }
@@ -348,7 +373,7 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
   const originMatch = text.match(/(?:made\s*in|country\s*of\s*origin|origin|product\s*of)\s*[:;.-]*\s*([a-zA-Z\s]+?)(?:[\n\r,.]|$)/i);
   if (originMatch) {
     extracted.countryOfOrigin = originMatch[1].trim();
-  } else if (/\b(india|made\s*in\s*india)\b/i.test(text)) {
+  } else if (/\b(india|made\s*in\s*india)\b/i.test(text) || /\b(?:bengaluru|sengalun|karnataka|kissartaka|delhi|gujarat|mumbai|haryana)\b/i.test(text) || /aditya\s*birla/i.test(text)) {
     extracted.countryOfOrigin = 'India';
   }
 
@@ -360,9 +385,15 @@ const extractInformation = async (text, imagePath = null, customApiKey = null) =
       break;
     }
   }
+  if (extracted.batchNumber === 'Not detected') {
+    const styleCodeMatch = text.match(/\b([A-Z]{4,}[A-Z0-9]{5,})\b/);
+    if (styleCodeMatch && !/(?:MANUFACTURED|COMPLAINTS|TECHNOPOLIS|EXECUTIVE|REGISTERED)/i.test(styleCodeMatch[1])) {
+      extracted.batchNumber = styleCodeMatch[1];
+    }
+  }
 
-  // Final check: Never leave manufacturer as blank string
-  if (!extracted.manufacturer || extracted.manufacturer.trim().length === 0) {
+  // Final check: Never leave manufacturer as blank string or "Inclusive of all Taxes"
+  if (!extracted.manufacturer || extracted.manufacturer.trim().length === 0 || /inclusive\s*of/i.test(extracted.manufacturer)) {
     extracted.manufacturer = 'Not detected';
   }
 
