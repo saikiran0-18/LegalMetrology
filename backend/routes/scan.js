@@ -7,7 +7,7 @@ const { performOCR } = require('../services/ocrService');
 const { extractInformation } = require('../services/extractionService');
 const { evaluateCompliance } = require('../rules');
 const { attachEvidenceToResults, calculateLegalStatus } = require('../services/evidenceService');
-const { assessDeclarationReadability, reassessReadabilityWithCalibration } = require('../services/readabilityService');
+const { assessDeclarationReadability, reassessReadabilityWithCalibration, assessOverallImageQuality } = require('../services/readabilityService');
 const sharp = require('sharp');
 const Scan = require('../models/Scan');
 
@@ -119,6 +119,14 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       console.warn('Readability assessment error:', readErr.message);
     }
 
+    // D3. Overall Image Clarity & Blur Quality Assessment
+    let imageQuality = { isBlurry: false, blurScore: 85, clarityStatus: 'CRISP' };
+    try {
+      imageQuality = await assessOverallImageQuality(imagePath);
+    } catch (qualityErr) {
+      console.warn('Overall image quality assessment error:', qualityErr.message);
+    }
+
     const finalRawText = extractedInfo.rawText || rawText;
 
     // E. Save to Database
@@ -141,6 +149,7 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
         referenceDimensionMm: null,
         pixelsPerMm: null
       },
+      imageQuality,
       readabilityAssessments
     });
 
@@ -155,6 +164,7 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       ruleResults: enrichedRuleResults,
       legalEnforcementStatus,
       calibration: newScan.calibration,
+      imageQuality,
       readabilityAssessments,
       extractedInfo
     });

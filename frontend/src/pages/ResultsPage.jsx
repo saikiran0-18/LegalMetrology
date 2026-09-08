@@ -641,6 +641,32 @@ export default function ResultsPage() {
         )}
       </div>
 
+      {/* Optical Blur & Image Clarity Advisory */}
+      {scan.imageQuality?.isBlurry && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-100 flex items-start justify-between gap-4 shadow-sm relative z-10 animate-in fade-in duration-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed">
+              <div className="font-bold text-sm text-amber-900 dark:text-amber-100 mb-0.5 flex items-center gap-2">
+                Optical Blur Detected &bull; Quality Status: {scan.imageQuality.clarityStatus}
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-black">
+                  Clarity Score: {scan.imageQuality.blurScore}/100
+                </span>
+              </div>
+              {scan.imageQuality.recommendation || 'The uploaded photograph exhibits optical or motion blur. Under Legal Metrology Rule 9, mandatory declarations must be legible and distinct. Physical verification is recommended.'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Blur Inspection Lightbox')}
+            className="px-3 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-950 dark:text-amber-100 text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+            Inspect Blur
+          </button>
+        </div>
+      )}
+
       {/* Main 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
         
@@ -655,6 +681,27 @@ export default function ResultsPage() {
                 <span className="text-xs font-bold text-foreground">Package Evidence Canvas</span>
               </div>
               <div className="flex items-center gap-2">
+                {scan.imageQuality && (
+                  <span 
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border flex items-center gap-1",
+                      scan.imageQuality.clarityStatus === 'CRISP' 
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                        : scan.imageQuality.clarityStatus === 'ACCEPTABLE'
+                        ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                    )}
+                    title={`Edge gradient variance: ${scan.imageQuality.edgeVariance || 'N/A'}`}
+                  >
+                    <span className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      scan.imageQuality.isBlurry ? "bg-amber-500 animate-ping" : "bg-emerald-500"
+                    )}></span>
+                    {scan.imageQuality.clarityStatus === 'CRISP' ? 'Sharp' :
+                     scan.imageQuality.clarityStatus === 'ACCEPTABLE' ? 'Clear' :
+                     scan.imageQuality.clarityStatus === 'MODERATE_BLUR' ? 'Blurry' : 'Severe Blur'}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Packaging Evidence Canvas')}

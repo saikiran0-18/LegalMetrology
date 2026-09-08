@@ -384,9 +384,94 @@ const reassessReadabilityWithCalibration = (readabilityAssessments, pixelsPerMm)
   });
 };
 
+/**
+ * Assess overall photographic clarity and blur across the entire image.
+ * Uses Laplacian convolution variance to detect optical, focus, and motion blur.
+ */
+const assessOverallImageQuality = async (imagePath) => {
+  const defaultQuality = {
+    isBlurry: false,
+    blurScore: 85,
+    edgeVariance: 50,
+    contrastScore: 50,
+    clarityStatus: 'CRISP',
+    recommendation: 'Image clarity is sufficient for automated statutory assessment.'
+  };
+
+  if (!imagePath || !fs.existsSync(imagePath)) return defaultQuality;
+
+  try {
+    const meta = await sharp(imagePath).metadata();
+    const width = meta.width || 800;
+
+    // Laplacian kernel for edge gradient frequency analysis
+    const laplacianKernel = {
+      width: 3,
+      height: 3,
+      kernel: [
+        0, 1, 0,
+        1, -4, 1,
+        0, 1, 0
+      ]
+    };
+
+    // Calculate edge variance on greyscale image
+    const convolvedStats = await sharp(imagePath)
+      .resize({ width: Math.min(width, 1200), withoutEnlargement: true })
+      .greyscale()
+      .convolve(laplacianKernel)
+      .stats();
+
+    const edgeVariance = convolvedStats.channels[0].stdev || 50;
+
+    // Contrast analysis on greyscale channel
+    const rawStats = await sharp(imagePath)
+      .resize({ width: Math.min(width, 1200), withoutEnlargement: true })
+      .greyscale()
+      .stats();
+
+    const contrast = rawStats.channels[0].stdev || 50;
+
+    let isBlurry = false;
+    let clarityStatus = 'CRISP';
+    let blurScore = Math.min(100, Math.round(30 + edgeVariance * 1.5));
+    let recommendation = 'Image sharpness is optimal for statutory declaration extraction.';
+
+    if (edgeVariance < 14) {
+      isBlurry = true;
+      clarityStatus = 'SEVERE_BLUR';
+      blurScore = Math.max(10, Math.round(edgeVariance * 2.2));
+      recommendation = 'Severe optical blur detected. Text declarations cannot be reliably verified. Re-photographing under steady lighting is strongly advised.';
+    } else if (edgeVariance < 24) {
+      isBlurry = true;
+      clarityStatus = 'MODERATE_BLUR';
+      blurScore = Math.max(30, Math.round(edgeVariance * 2.5));
+      recommendation = 'Moderate blur detected. Optical OCR character legibility may be degraded. Officer physical verification recommended.';
+    } else if (edgeVariance < 32) {
+      isBlurry = false;
+      clarityStatus = 'ACCEPTABLE';
+      blurScore = Math.round(45 + edgeVariance * 1.2);
+      recommendation = 'Image clarity is acceptable for automated inspection.';
+    }
+
+    return {
+      isBlurry,
+      blurScore,
+      edgeVariance: Number(edgeVariance.toFixed(1)),
+      contrastScore: Math.round(contrast),
+      clarityStatus,
+      recommendation
+    };
+  } catch (err) {
+    console.warn('Overall image quality analysis error:', err.message);
+    return defaultQuality;
+  }
+};
+
 module.exports = {
   assessDeclarationReadability,
   reassessReadabilityWithCalibration,
   analyzeCropOpticalQuality,
+  assessOverallImageQuality,
   RULE_09_REQUIREMENTS
 };

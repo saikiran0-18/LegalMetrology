@@ -100,6 +100,15 @@ const scanSchema = new mongoose.Schema({
     calibratedAt: { type: Date, default: null },
     calibratedBy: { type: String, default: null }
   },
+  // Overall Image Clarity & Blur Quality Assessment
+  imageQuality: {
+    isBlurry: { type: Boolean, default: false },
+    blurScore: { type: Number, default: 85 },
+    edgeVariance: { type: Number, default: 50 },
+    contrastScore: { type: Number, default: 50 },
+    clarityStatus: { type: String, default: 'CRISP' }, // 'CRISP' | 'ACCEPTABLE' | 'MODERATE_BLUR' | 'SEVERE_BLUR'
+    recommendation: { type: String, default: 'Image clarity is sufficient for automated statutory assessment.' }
+  },
   // Declaration Readability & Font-Size Assessment Schema
   readabilityAssessments: [
     {
