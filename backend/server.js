@@ -71,6 +71,33 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static(uploadsDir));
 
+// Fallback image handler for /uploads requests that were not found on disk
+app.get('/uploads/:filename', (req, res) => {
+  const reqFilename = path.basename(req.params.filename);
+
+  // 1. Check inside evidence subfolder
+  const evidenceFile = path.join(uploadsDir, 'evidence', reqFilename);
+  if (fs.existsSync(evidenceFile)) {
+    return res.sendFile(evidenceFile);
+  }
+
+  // 2. Check for default-product.png
+  const defaultFile = path.join(uploadsDir, 'default-product.png');
+  if (fs.existsSync(defaultFile)) {
+    return res.sendFile(defaultFile);
+  }
+
+  // 3. Look for any existing image in uploads directory
+  try {
+    const allUploads = fs.readdirSync(uploadsDir).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f));
+    if (allUploads.length > 0) {
+      return res.sendFile(path.join(uploadsDir, allUploads[0]));
+    }
+  } catch (err) {}
+
+  res.status(404).json({ error: 'Image not found' });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/scan', scanRoutes);

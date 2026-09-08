@@ -133,65 +133,16 @@ export default function ResultsPage() {
   const [calibrationError, setCalibrationError] = useState(null);
   const [calibrationSuccess, setCalibrationSuccess] = useState(null);
 
-  // Gemini AI Extraction & Configuration State
-  const [isExtractingGemini, setIsExtractingGemini] = useState(false);
-  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
-  const [geminiApiKeyInput, setGeminiApiKeyInput] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [geminiStatus, setGeminiStatus] = useState({ hasKey: false, keyPreview: '' });
-  const [geminiMessage, setGeminiMessage] = useState(null);
-  const [showApiKey, setShowApiKey] = useState(false);
+  // Re-parse Statutory Declarations State
+  const [isReParsing, setIsReParsing] = useState(false);
+  const [reParseMessage, setReParseMessage] = useState(null);
 
-  const fetchGeminiConfig = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/api/scan/gemini-config`);
-      if (res.data) {
-        setGeminiStatus(res.data);
-      }
-    } catch (e) {
-      console.warn('Could not check Gemini config:', e.message);
-    }
-  };
-
-  useEffect(() => {
-    fetchGeminiConfig();
-  }, []);
-
-  const handleSaveGeminiKey = async (e) => {
-    if (e) e.preventDefault();
-    if (!geminiApiKeyInput || geminiApiKeyInput.trim().length < 10) {
-      setGeminiMessage({ type: 'error', text: 'Please enter a valid Gemini API Key.' });
-      return;
-    }
+  const handleReParseDeclarations = async () => {
+    setIsReParsing(true);
+    setReParseMessage(null);
 
     try {
-      const trimmed = geminiApiKeyInput.trim();
-      const res = await axios.post(`${API_URL}/api/scan/gemini-config`, { apiKey: trimmed });
-      if (res.data?.success) {
-        localStorage.setItem('gemini_api_key', trimmed);
-        setGeminiStatus({ hasKey: true, keyPreview: res.data.keyPreview });
-        setGeminiMessage({ type: 'success', text: 'Gemini API Key activated! Extracting declarations...' });
-        setIsGeminiModalOpen(false);
-        handleExtractWithGemini(trimmed);
-      }
-    } catch (err) {
-      setGeminiMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save Gemini key.' });
-    }
-  };
-
-  const handleExtractWithGemini = async (overrideKey = null, allowFallback = false) => {
-    const keyToUse = overrideKey || localStorage.getItem('gemini_api_key') || '';
-    if (!allowFallback && !geminiStatus.hasKey && (!keyToUse || keyToUse.length < 10)) {
-      setIsGeminiModalOpen(true);
-      return;
-    }
-
-    setIsExtractingGemini(true);
-    setGeminiMessage(null);
-    setIsGeminiModalOpen(false);
-
-    try {
-      const payload = keyToUse ? { apiKey: keyToUse } : {};
-      const res = await axios.post(`${API_URL}/api/scan/${scan._id}/re-extract`, payload);
+      const res = await axios.post(`${API_URL}/api/scan/${scan._id}/re-extract`, {});
       if (res.data?.success) {
         setScan(res.data.scan);
         setActiveRule(prev => {
@@ -199,22 +150,17 @@ export default function ResultsPage() {
           const found = res.data.scan.ruleResults.find(r => r.ruleId === prev.ruleId);
           return found || res.data.scan.ruleResults[0];
         });
-        setGeminiMessage({
+        setReParseMessage({
           type: 'success',
-          text: (keyToUse || geminiStatus.hasKey)
-            ? 'Declarations successfully extracted with Gemini AI! All mandatory packaging fields placed correctly.'
-            : 'Declarations successfully re-parsed with high-precision Legal Metrology engine! All statutory fields updated.'
+          text: 'Declarations successfully re-parsed! Statutory fields updated.'
         });
       }
     } catch (err) {
-      console.error('Failed to extract declarations', err);
-      const errMsg = err.response?.data?.error || 'Extraction failed. Please check your API Key and image.';
-      setGeminiMessage({ type: 'error', text: errMsg });
-      if (errMsg.toLowerCase().includes('key') || errMsg.toLowerCase().includes('api')) {
-        setIsGeminiModalOpen(true);
-      }
+      console.error('Failed to re-parse declarations', err);
+      const errMsg = err.response?.data?.error || 'Re-parse failed. Please check the image.';
+      setReParseMessage({ type: 'error', text: errMsg });
     } finally {
-      setIsExtractingGemini(false);
+      setIsReParsing(false);
     }
   };
 
@@ -982,48 +928,28 @@ export default function ResultsPage() {
 
                 <button
                   type="button"
-                  onClick={() => handleExtractWithGemini(null, true)}
-                  disabled={isExtractingGemini}
-                  className="px-2.5 py-1 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground text-[11px] font-bold transition-all border border-border/50 flex items-center gap-1 disabled:opacity-50"
-                  title="Re-run extraction using high-precision parser"
+                  onClick={() => handleReParseDeclarations()}
+                  disabled={isReParsing}
+                  className="px-2.5 py-1 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground text-[11px] font-bold transition-all border border-border/50 flex items-center gap-1.5 disabled:opacity-50"
+                  title="Re-run extraction and refresh statutory declarations"
                 >
-                  <RefreshCw className={`w-3 h-3 ${isExtractingGemini ? 'animate-spin' : ''}`} />
-                  Re-parse
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleExtractWithGemini()}
-                  disabled={isExtractingGemini}
-                  className="px-3 py-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-                  title="Extract declarations directly with Gemini Multimodal AI"
-                >
-                  <Sparkles className={`w-3.5 h-3.5 text-amber-300 ${isExtractingGemini ? 'animate-spin' : ''}`} />
-                  {isExtractingGemini ? 'Extracting with Gemini...' : 'Extract with Gemini AI'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsGeminiModalOpen(true)}
-                  className="p-1.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all border border-border/50"
-                  title={geminiStatus.hasKey ? `Gemini API Key Configured (${geminiStatus.keyPreview})` : "Configure Gemini API Key"}
-                >
-                  <Key className={`w-3.5 h-3.5 ${geminiStatus.hasKey ? 'text-emerald-500' : 'text-muted-foreground'}`} />
+                  <RefreshCw className={`w-3 h-3 ${isReParsing ? 'animate-spin' : ''}`} />
+                  {isReParsing ? 'Re-parsing...' : 'Re-parse'}
                 </button>
               </div>
             </div>
 
-            {geminiMessage && (
+            {reParseMessage && (
               <div className={`px-4 py-2 text-xs font-bold flex items-center justify-between border-b ${
-                geminiMessage.type === 'success' 
+                reParseMessage.type === 'success' 
                   ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
                   : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
               }`}>
                 <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  {geminiMessage.text}
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {reParseMessage.text}
                 </span>
-                <button onClick={() => setGeminiMessage(null)} className="text-muted-foreground hover:text-foreground">
+                <button onClick={() => setReParseMessage(null)} className="text-muted-foreground hover:text-foreground">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -2250,102 +2176,6 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Gemini API Key Configuration Modal */}
-      {isGeminiModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border/70 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-purple-500/20 to-indigo-500/20 border border-purple-500/30 text-purple-600 dark:text-purple-400">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-foreground tracking-tight">Google Gemini Vision AI</h3>
-                  <p className="text-xs text-muted-foreground">Automated packaging declarations extractor</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsGeminiModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Google Gemini Multimodal Vision reads the high-resolution packaging image directly and extracts mandatory Legal Metrology fields (dimensions, manufacturer, complete address, dates, MRP, batch number) with state-of-the-art optical accuracy.
-            </p>
-
-            {geminiStatus.hasKey && (
-              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs flex items-center justify-between">
-                <span className="flex items-center gap-1.5 font-bold">
-                  <CheckCircle2 className="w-4 h-4" /> Active Key: {geminiStatus.keyPreview}
-                </span>
-                <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded bg-emerald-500/20">Configured</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveGeminiKey} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-foreground mb-1">
-                  Gemini API Key:
-                </label>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? "text" : "password"}
-                    value={geminiApiKeyInput}
-                    onChange={(e) => setGeminiApiKeyInput(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-border/70 bg-background text-foreground text-xs font-mono pr-10 focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground p-0.5"
-                  >
-                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-1.5">
-                  Need a key? <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-bold">Get a free key from Google AI Studio &rarr;</a>
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => handleExtractWithGemini(null, true)}
-                  disabled={isExtractingGemini}
-                  className="px-3 py-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground text-xs font-semibold border border-border/70 transition-all flex items-center gap-1.5"
-                  title="Re-run extraction using our high-precision Legal Metrology text parser without Gemini API Key"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isExtractingGemini ? 'animate-spin' : ''}`} />
-                  Re-parse Without Key
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsGeminiModalOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-border/60 text-xs font-bold text-muted-foreground hover:text-foreground transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isExtractingGemini || !geminiApiKeyInput || geminiApiKeyInput.trim().length < 10}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    Save & Extract
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

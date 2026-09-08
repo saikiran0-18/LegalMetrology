@@ -78,6 +78,38 @@ const CATEGORIES = [
   },
 ];
 
+function ProductThumbnail({ scan }) {
+  const [hasError, setHasError] = useState(false);
+  const category = resolveCategory(scan);
+  const catConfig = CATEGORIES.find(c => c.id === category) || CATEGORIES[CATEGORIES.length - 1];
+  const CatIcon = catConfig.icon;
+
+  const primaryUrl = getImageUrl(scan.imagePath);
+
+  // If image fails to load or no image path, render a crisp category badge instead of broken square
+  if (hasError || !primaryUrl) {
+    return (
+      <div className={`h-12 w-12 rounded-xl flex-shrink-0 flex flex-col items-center justify-center border shadow-sm ${catConfig.badgeClass}`} title={scan.extractedInfo?.productName || category}>
+        <CatIcon className="w-5 h-5 mb-0.5 opacity-90" />
+        <span className="text-[8px] font-black uppercase tracking-tighter truncate max-w-[42px] px-0.5">
+          {(scan.extractedInfo?.productName || category || 'ITEM').slice(0, 5)}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-12 w-12 rounded-xl bg-white dark:bg-slate-900 border border-border flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
+      <img 
+        src={primaryUrl} 
+        alt={scan.extractedInfo?.productName || 'Product thumbnail'} 
+        className="max-h-full max-w-full object-contain p-0.5 transition-transform hover:scale-110" 
+        onError={() => setHasError(true)} 
+      />
+    </div>
+  );
+}
+
 export default function History() {
   const [history, setHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -279,14 +311,7 @@ export default function History() {
                       {/* Product Thumbnail & Details */}
                       <td className="px-6 py-4">
                         <div className="flex items-center">
-                          <div className="h-12 w-12 rounded-xl bg-white border border-border flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
-                            <img 
-                              src={getImageUrl(scan.imagePath)} 
-                              alt="thumb" 
-                              className="max-h-full max-w-full object-contain" 
-                              onError={(e) => { e.target.src = 'https://via.placeholder.com/50'; }} 
-                            />
-                          </div>
+                          <ProductThumbnail scan={scan} />
                           <div className="ml-4">
                             <div className="font-semibold text-foreground text-sm">
                               {scan.extractedInfo?.productName || 'Unknown Product'}

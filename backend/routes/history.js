@@ -7,13 +7,35 @@ const { requireAuth } = require('../middleware/auth');
 // Protect all history endpoints
 router.use(requireAuth);
 
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, '../uploads');
+
 const normalizeScan = (doc) => {
   if (!doc) return doc;
   const s = doc.toObject ? doc.toObject() : { ...doc };
-  if (s.imagePath) {
+
+  // 1. If imagePath exists, normalize it
+  if (s.imagePath && s.imagePath !== 'Not detected') {
     const filename = path.basename(s.imagePath);
     s.imagePath = `/uploads/${filename}`;
+  } else {
+    // 2. Fallback to evidence image if available
+    let resolvedEvidence = null;
+    if (Array.isArray(s.ruleResults)) {
+      for (const r of s.ruleResults) {
+        if (r.originalImagePath) {
+          resolvedEvidence = `/uploads/${path.basename(r.originalImagePath)}`;
+          break;
+        }
+        if (r.croppedEvidenceUrl) {
+          resolvedEvidence = `/uploads/${path.basename(r.croppedEvidenceUrl)}`;
+          break;
+        }
+      }
+    }
+    s.imagePath = resolvedEvidence || '/uploads/default-product.png';
   }
+
   return s;
 };
 

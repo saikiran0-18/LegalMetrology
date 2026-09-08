@@ -10,3 +10,5 @@ dist-ssr
 *.log
 backend/uploads/*
 !backend/uploads/.gitkeep
+!backend/uploads/default-product.png
+
