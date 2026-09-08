@@ -7,6 +7,8 @@ const { performOCR } = require('../services/ocrService');
 const { extractInformation } = require('../services/extractionService');
 const { evaluateCompliance } = require('../rules');
 const { attachEvidenceToResults, calculateLegalStatus } = require('../services/evidenceService');
+const { assessDeclarationReadability, reassessReadabilityWithCalibration } = require('../services/readabilityService');
+const sharp = require('sharp');
 const Scan = require('../models/Scan');
 
 const { requireAuth } = require('../middleware/auth');
@@ -109,6 +111,14 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
     const enrichedRuleResults = await attachEvidenceToResults(complianceResults.ruleResults, imagePath);
     const legalEnforcementStatus = calculateLegalStatus(enrichedRuleResults);
 
+    // D2. Declaration Readability & Font-Size Assessment (Rule 9 / Schedule II)
+    let readabilityAssessments = [];
+    try {
+      readabilityAssessments = await assessDeclarationReadability(imagePath, extractedInfo, null);
+    } catch (readErr) {
+      console.warn('Readability assessment error:', readErr.message);
+    }
+
     const finalRawText = extractedInfo.rawText || rawText;
 
     // E. Save to Database
@@ -124,7 +134,14 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       ruleResults: enrichedRuleResults,
       score: complianceResults.score,
       riskLevel: complianceResults.riskLevel,
-      legalEnforcementStatus
+      legalEnforcementStatus,
+      calibration: {
+        isCalibrated: false,
+        referenceType: 'NONE',
+        referenceDimensionMm: null,
+        pixelsPerMm: null
+      },
+      readabilityAssessments
     });
 
     await newScan.save();
@@ -137,6 +154,8 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       ...complianceResults,
       ruleResults: enrichedRuleResults,
       legalEnforcementStatus,
+      calibration: newScan.calibration,
+      readabilityAssessments,
       extractedInfo
     });
   } catch (error) {
@@ -256,6 +275,81 @@ router.post('/:id/evidence/:evidenceId/upload', requireAuth, uploadEvidence.sing
   } catch (err) {
     console.error('Upload additional evidence error:', err);
     res.status(500).json({ error: 'Failed to upload additional evidence: ' + err.message });
+  }
+});
+
+// 5. Image Calibration for Physical Font-Size & Readability Assessment (Rule 9)
+router.post('/:id/calibrate', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      referenceType = 'PACKAGING_HEIGHT', // 'PACKAGING_HEIGHT' | 'PACKAGING_WIDTH' | 'KNOWN_MARKER' | 'CUSTOM_DIMENSION'
+      referenceDimensionMm,
+      packageHeightCm,
+      packageWidthCm,
+      customPixelsPerMm
+    } = req.body;
+
+    const scan = await Scan.findById(id);
+    if (!scan) return res.status(404).json({ error: 'Scan record not found' });
+
+    let absoluteImagePath = scan.imagePath;
+    if (!path.isAbsolute(absoluteImagePath)) {
+      absoluteImagePath = path.join(__dirname, '..', scan.imagePath);
+    }
+
+    let calculatedPxPerMm = null;
+    let dimensionMm = Number(referenceDimensionMm);
+
+    if (packageHeightCm && Number(packageHeightCm) > 0) {
+      dimensionMm = Number(packageHeightCm) * 10; // convert cm to mm
+    } else if (packageWidthCm && Number(packageWidthCm) > 0) {
+      dimensionMm = Number(packageWidthCm) * 10;
+    }
+
+    if (customPixelsPerMm && Number(customPixelsPerMm) > 0) {
+      calculatedPxPerMm = Number(customPixelsPerMm);
+    } else if (dimensionMm && dimensionMm > 0) {
+      if (fs.existsSync(absoluteImagePath)) {
+        const meta = await sharp(absoluteImagePath).metadata();
+        const baseDimensionPx = (referenceType === 'PACKAGING_WIDTH' || packageWidthCm) ? (meta.width || 800) : (meta.height || 1000);
+        calculatedPxPerMm = Number((baseDimensionPx / dimensionMm).toFixed(4));
+      } else {
+        // Fallback assuming 1000px height
+        calculatedPxPerMm = Number((1000 / dimensionMm).toFixed(4));
+      }
+    }
+
+    if (!calculatedPxPerMm || calculatedPxPerMm <= 0) {
+      return res.status(400).json({
+        error: 'Invalid calibration input. Please provide a valid package height/width in cm/mm or custom px/mm.'
+      });
+    }
+
+    // Re-evaluate readability assessments with calibrated scale
+    const updatedAssessments = reassessReadabilityWithCalibration(scan.readabilityAssessments, calculatedPxPerMm);
+
+    scan.calibration = {
+      isCalibrated: true,
+      referenceType,
+      referenceDimensionMm: dimensionMm,
+      pixelsPerMm: calculatedPxPerMm,
+      calibratedAt: new Date(),
+      calibratedBy: req.user?.name || 'Inspector Officer'
+    };
+    scan.readabilityAssessments = updatedAssessments;
+
+    await scan.save();
+
+    res.json({
+      success: true,
+      message: `Image calibrated successfully at ${calculatedPxPerMm} px/mm (${dimensionMm}mm reference). Font sizes re-evaluated under Rule 9.`,
+      calibration: scan.calibration,
+      readabilityAssessments: scan.readabilityAssessments
+    });
+  } catch (err) {
+    console.error('Calibration error:', err);
+    res.status(500).json({ error: 'Failed to calibrate scan image: ' + err.message });
   }
 });
 

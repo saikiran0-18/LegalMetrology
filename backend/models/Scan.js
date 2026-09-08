@@ -91,6 +91,53 @@ const scanSchema = new mongoose.Schema({
   },
   officerReviewedAt: { type: Date, default: null },
   officerReviewedBy: { type: String, default: null },
+  // Image Calibration Schema
+  calibration: {
+    isCalibrated: { type: Boolean, default: false },
+    referenceType: { type: String, default: 'UNSPECIFIED' }, // 'PACKAGE_HEIGHT', 'PACKAGE_WIDTH', 'RULER_SCALE', 'CUSTOM'
+    referenceDimensionMm: { type: Number, default: null },
+    pixelsPerMm: { type: Number, default: null },
+    calibratedAt: { type: Date, default: null },
+    calibratedBy: { type: String, default: null }
+  },
+  // Declaration Readability & Font-Size Assessment Schema
+  readabilityAssessments: [
+    {
+      declaration: { type: String, required: true },
+      ruleId: { type: String, required: true },
+      ruleNumber: { type: String, default: '' },
+      detectedText: { type: String, default: '' },
+      boundingBox: {
+        x: { type: Number, default: 0 },
+        y: { type: Number, default: 0 },
+        width: { type: Number, default: 0 },
+        height: { type: Number, default: 0 }
+      },
+      characterHeightPx: { type: Number, default: 0 },
+      characterHeightMm: { type: Number, default: null },
+      isCalibrated: { type: Boolean, default: false },
+      readabilityStatus: { type: String, default: 'Optimal Clarity' },
+      metrics: {
+        blurDetected: { type: Boolean, default: false },
+        blurScore: { type: Number, default: 100 },
+        lowContrast: { type: Boolean, default: false },
+        contrastRatio: { type: Number, default: 50 },
+        obstructionDetected: { type: Boolean, default: false },
+        obstructionType: { type: String, default: null },
+        distortionDetected: { type: Boolean, default: false },
+        distortionScore: { type: Number, default: 0 },
+        verySmallText: { type: Boolean, default: false }
+      },
+      confidence: { type: Number, default: 0.9 },
+      applicableRequirement: { type: String, default: 'Rule 9 & Schedule II: Minimum font height adherence' },
+      result: { 
+        type: String, 
+        enum: ['PASS', 'FAIL', 'REVIEW'], 
+        default: 'REVIEW' 
+      },
+      explanation: { type: String, default: '' }
+    }
+  ],
   timestamp: { type: Date, default: Date.now },
 });
 

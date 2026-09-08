@@ -27,7 +27,17 @@ import {
   Layers,
   AlertOctagon,
   Save,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Ruler,
+  HelpCircle,
+  Maximize2,
+  Sliders,
+  Sparkles,
+  CheckSquare,
+  Info,
+  RefreshCw,
+  ZoomIn,
+  Search
 } from 'lucide-react';
 import axios from 'axios';
 import jsPDF from 'jspdf';
@@ -40,6 +50,10 @@ export default function ResultsPage() {
   const [activeRule, setActiveRule] = useState(null);
   const [selectedJurisdiction, setSelectedJurisdiction] = useState('ALL'); // 'ALL' | 'Central' | 'State'
   const [loading, setLoading] = useState(true);
+
+  // Main Tab Navigation: 'statutory' (Legal Rules & Adjudication) vs 'readability' (Rule 9 Font Size & Readability)
+  const [activeMainTab, setActiveMainTab] = useState('statutory');
+  const [selectedReadabilityItem, setSelectedReadabilityItem] = useState(null);
 
   // Evidence Management UI State
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
@@ -55,6 +69,16 @@ export default function ResultsPage() {
   const [uploadNotes, setUploadNotes] = useState('');
   const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Image Dimension Calibration State (Rule 9)
+  const [isCalibrateOpen, setIsCalibrateOpen] = useState(false);
+  const [calibReferenceType, setCalibReferenceType] = useState('PACKAGING_HEIGHT');
+  const [calibDimensionValue, setCalibDimensionValue] = useState('20');
+  const [calibUnit, setCalibUnit] = useState('cm'); // 'cm' | 'mm'
+  const [customPxPerMm, setCustomPxPerMm] = useState('');
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationError, setCalibrationError] = useState(null);
+  const [calibrationSuccess, setCalibrationSuccess] = useState(null);
 
   const fetchScan = async () => {
     try {
@@ -127,6 +151,55 @@ export default function ResultsPage() {
     if (selectedJurisdiction === 'ALL') return true;
     return r.jurisdiction === selectedJurisdiction;
   });
+
+  // Readability & Font-Size Assessment (Rule 9) Statistics
+  const readabilityAssessments = scan.readabilityAssessments || [];
+  const readPassCount = readabilityAssessments.filter(r => r.result === 'PASS').length;
+  const readFailCount = readabilityAssessments.filter(r => r.result === 'FAIL').length;
+  const readReviewCount = readabilityAssessments.filter(r => r.result === 'REVIEW').length;
+  const isCalibrated = Boolean(scan.calibration?.isCalibrated);
+
+  // Handle Image Dimension Calibration (Rule 9)
+  const handleCalibrate = async (e) => {
+    if (e) e.preventDefault();
+    setIsCalibrating(true);
+    setCalibrationError(null);
+    setCalibrationSuccess(null);
+
+    try {
+      let dimensionMm = Number(calibDimensionValue);
+      if (calibUnit === 'cm') {
+        dimensionMm = dimensionMm * 10;
+      }
+
+      const payload = {
+        referenceType: calibReferenceType,
+        referenceDimensionMm: dimensionMm,
+        packageHeightCm: (calibReferenceType === 'PACKAGING_HEIGHT' && calibUnit === 'cm') ? Number(calibDimensionValue) : undefined,
+        packageWidthCm: (calibReferenceType === 'PACKAGING_WIDTH' && calibUnit === 'cm') ? Number(calibDimensionValue) : undefined,
+        customPixelsPerMm: customPxPerMm ? Number(customPxPerMm) : undefined
+      };
+
+      const res = await axios.post(`${API_URL}/api/scan/${scan._id}/calibrate`, payload);
+      if (res.data?.success) {
+        setScan(prev => ({
+          ...prev,
+          calibration: res.data.calibration,
+          readabilityAssessments: res.data.readabilityAssessments
+        }));
+        setCalibrationSuccess(res.data.message);
+        setTimeout(() => {
+          setIsCalibrateOpen(false);
+          setCalibrationSuccess(null);
+        }, 1200);
+      }
+    } catch (err) {
+      console.error('Calibration error:', err);
+      setCalibrationError(err.response?.data?.error || 'Failed to calibrate image dimensions.');
+    } finally {
+      setIsCalibrating(false);
+    }
+  };
 
   // Handle Officer Adjudication (Accept, Reject, Edit Text, Change Category, Add Comments)
   const handleAdjudicate = async (newStatus) => {
@@ -302,6 +375,59 @@ export default function ResultsPage() {
       }
     });
 
+    // Section 3: Declaration Readability & Font-Size Assessment (Rule 9 Schedule II)
+    if (scan.readabilityAssessments && scan.readabilityAssessments.length > 0) {
+      const readY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(13);
+      doc.setTextColor(20, 30, 70);
+      doc.text("3. Declaration Readability & Font-Size Assessment (Rule 9)", 14, readY);
+
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(
+        scan.calibration?.isCalibrated
+          ? `Calibration Status: Calibrated (${scan.calibration.pixelsPerMm} px/mm, ref: ${scan.calibration.referenceDimensionMm}mm)`
+          : 'Calibration Status: Uncalibrated Photograph (Physical verification required per statutory rule)',
+        14,
+        readY + 5
+      );
+
+      const readabilityRows = scan.readabilityAssessments.map(item => [
+        item.declaration,
+        item.detectedText ? (item.detectedText.length > 32 ? item.detectedText.slice(0, 32) + '...' : item.detectedText) : 'Not detected',
+        item.isCalibrated ? `${item.characterHeightMm} mm` : `${item.characterHeightPx} px (uncalibrated)`,
+        item.readabilityStatus,
+        `${Math.round((item.confidence || 0.9) * 100)}%`,
+        item.result,
+        item.applicableRequirement || 'Rule 9 font height standard'
+      ]);
+
+      autoTable(doc, {
+        startY: readY + 8,
+        head: [["Declaration", "Detected Text", "Est Size", "Readability", "Conf", "Result", "Statutory Requirement"]],
+        body: readabilityRows,
+        theme: 'grid',
+        headStyles: { fillColor: [40, 50, 90], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 7, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 30, fontStyle: 'bold' },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 24 },
+          3: { cellWidth: 24 },
+          4: { cellWidth: 12 },
+          5: { cellWidth: 16, fontStyle: 'bold' },
+          6: { cellWidth: 41 }
+        },
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === 5) {
+            if (data.cell.raw === 'PASS') data.cell.styles.textColor = [16, 120, 50];
+            else if (data.cell.raw === 'REVIEW') data.cell.styles.textColor = [180, 100, 10];
+            else if (data.cell.raw === 'FAIL') data.cell.styles.textColor = [180, 20, 20];
+          }
+        }
+      });
+    }
+
     doc.save(`PackSure-Evidence-Report-${scan._id}.pdf`);
   };
 
@@ -340,6 +466,40 @@ export default function ResultsPage() {
       `"${(r.violationCategory || '').replace(/"/g, '""')}"`,
       `"${(r.sourceDocument || '').replace(/"/g, '""')}"`
     ]);
+
+    // Append Readability Assessment Section to CSV
+    if (scan.readabilityAssessments && scan.readabilityAssessments.length > 0) {
+      rows.push(["", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+      rows.push(["--- READABILITY & FONT SIZE ASSESSMENTS (RULE 9) ---", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+      rows.push([
+        "Declaration",
+        "Rule Ref",
+        "Detected Text",
+        "Est Size (mm/px)",
+        "Is Calibrated",
+        "Readability Status",
+        "Confidence",
+        "Result (PASS/FAIL/REVIEW)",
+        "Applicable Requirement",
+        "Explanation",
+        "", "", "", ""
+      ]);
+      scan.readabilityAssessments.forEach(item => {
+        rows.push([
+          `"${item.declaration || ''}"`,
+          `"${item.ruleNumber || ''}"`,
+          `"${(item.detectedText || '').replace(/"/g, '""')}"`,
+          `"${item.isCalibrated ? `${item.characterHeightMm} mm` : `${item.characterHeightPx} px`}"`,
+          `"${item.isCalibrated ? 'YES' : 'NO'}"`,
+          `"${item.readabilityStatus || ''}"`,
+          `"${Math.round((item.confidence || 0.9) * 100)}%"`,
+          `"${item.result || ''}"`,
+          `"${(item.applicableRequirement || '').replace(/"/g, '""')}"`,
+          `"${(item.explanation || '').replace(/"/g, '""')}"`,
+          "", "", "", ""
+        ]);
+      });
+    }
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -465,8 +625,8 @@ export default function ResultsPage() {
                   onError={(e) => { e.target.src = 'https://via.placeholder.com/350'; }}
                 />
 
-                {/* Overlaid Interactive Bounding Boxes */}
-                {showBoundingBoxes && scan.ruleResults?.map((ruleItem) => {
+                {/* Overlaid Interactive Bounding Boxes: Statutory Mode */}
+                {showBoundingBoxes && activeMainTab === 'statutory' && scan.ruleResults?.map((ruleItem) => {
                   const region = ruleItem.highlightedRegion || { x: 10, y: 10, width: 70, height: 18 };
                   const isSelected = activeRule?.ruleId === ruleItem.ruleId;
                   const isVerified = ruleItem.officerVerificationStatus === 'OFFICER_VERIFIED';
@@ -508,20 +668,77 @@ export default function ResultsPage() {
                     </div>
                   );
                 })}
+
+                {/* Overlaid Interactive Bounding Boxes: Readability & Font-Size Mode (Rule 9) */}
+                {showBoundingBoxes && activeMainTab === 'readability' && readabilityAssessments.map((item, idx) => {
+                  const region = item.boundingBox || { x: 10, y: 10 + idx * 8, width: 60, height: 6 };
+                  const isSelected = selectedReadabilityItem?.declaration === item.declaration;
+                  const isPass = item.result === 'PASS';
+                  const isFail = item.result === 'FAIL';
+
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedReadabilityItem(item)}
+                      style={{
+                        left: `${region.x}%`,
+                        top: `${region.y}%`,
+                        width: `${region.width}%`,
+                        height: `${region.height}%`
+                      }}
+                      title={`${item.declaration}: ${item.result} (${item.readabilityStatus}) - ${item.isCalibrated ? `${item.characterHeightMm}mm` : `${item.characterHeightPx}px`}`}
+                      className={cn(
+                        "absolute rounded-lg border-2 cursor-pointer transition-all duration-300 z-10 group",
+                        isSelected ? "ring-4 ring-primary shadow-xl scale-[1.02] z-20" : "hover:scale-[1.01]",
+                        isPass ? "border-emerald-500 bg-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.3)]" :
+                        isFail ? "border-rose-600 bg-rose-600/25 shadow-[0_0_15px_rgba(225,29,72,0.3)]" :
+                        "border-amber-500 bg-amber-500/25 border-dashed animate-pulse"
+                      )}
+                    >
+                      <span className={cn(
+                        "absolute -top-3 left-1 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm uppercase tracking-wider flex items-center gap-1",
+                        isPass ? "bg-emerald-600 text-white" :
+                        isFail ? "bg-rose-600 text-white" :
+                        "bg-amber-500 text-black font-extrabold"
+                      )}>
+                        {item.result} &bull; {item.declaration}
+                        <span className="opacity-90 font-mono">
+                          ({item.isCalibrated ? `${item.characterHeightMm}mm` : `${item.characterHeightPx}px`})
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Canvas Legend */}
             <div className="flex flex-wrap items-center justify-between text-[11px] text-muted-foreground pt-3 mt-2 border-t border-border/30 gap-2">
-              <span className="flex items-center gap-1 font-semibold">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> AI Detected
-              </span>
-              <span className="flex items-center gap-1 font-semibold">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Officer Verified
-              </span>
-              <span className="flex items-center gap-1 font-semibold">
-                <span className="w-2.5 h-2.5 rounded-full bg-zinc-500"></span> Officer Rejected
-              </span>
+              {activeMainTab === 'statutory' ? (
+                <>
+                  <span className="flex items-center gap-1 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> AI Detected
+                  </span>
+                  <span className="flex items-center gap-1 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Officer Verified
+                  </span>
+                  <span className="flex items-center gap-1 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-zinc-500"></span> Officer Rejected
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> PASS (Compliant Height)
+                  </span>
+                  <span className="flex items-center gap-1 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> REVIEW (Uncalibrated / Verification Req.)
+                  </span>
+                  <span className="flex items-center gap-1 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span> FAIL (Below Min Size / Obstructed)
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
@@ -558,9 +775,63 @@ export default function ResultsPage() {
 
         {/* Right Column (7 Cols): Rule Evaluation List & Officer Adjudication Workspace */}
         <div className="lg:col-span-7 space-y-6">
-          
-          {/* Adjudication Score & Counts Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+          {/* Module Mode Switcher: Statutory Rules vs Readability & Font-Size (Rule 9) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl glass dark:glass-dark border border-border/50 shadow-sm">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveMainTab('statutory')}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                  activeMainTab === 'statutory'
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                )}
+              >
+                <Scale className="w-4 h-4" />
+                Statutory Rules & Evidence ({scan.ruleResults?.length || 0})
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveMainTab('readability');
+                  if (!selectedReadabilityItem && readabilityAssessments.length > 0) {
+                    setSelectedReadabilityItem(readabilityAssessments[0]);
+                  }
+                }}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                  activeMainTab === 'readability'
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                )}
+              >
+                <Eye className="w-4 h-4" />
+                Readability & Font Size (Rule 9)
+                <span className={cn(
+                  "text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider",
+                  isCalibrated 
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
+                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                )}>
+                  {isCalibrated ? 'CALIBRATED' : 'UNCALIBRATED'}
+                </span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setIsCalibrateOpen(true)}
+              className="px-3.5 py-2 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Ruler className="w-4 h-4" />
+              {isCalibrated ? 'Recalibrate Scale' : 'Calibrate Dimensions'}
+            </button>
+          </div>
+
+          {activeMainTab === 'statutory' && (
+            <div className="space-y-6 animate-in fade-in duration-150">
+              {/* Adjudication Score & Counts Summary */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="glass rounded-2xl p-4 border border-border/50 text-center shadow-sm">
               <div className="text-2xl font-black text-foreground">{scan.score}%</div>
               <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-0.5">Compliance Score</div>
@@ -1012,6 +1283,320 @@ export default function ResultsPage() {
             </div>
 
           </div>
+          </div>
+        )}
+
+        {/* Readability & Font-Size Assessment Section (Rule 9) */}
+        {activeMainTab === 'readability' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            
+            {/* Statutory Calibration Notice */}
+            {isCalibrated ? (
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-start justify-between gap-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <div className="font-bold text-sm text-emerald-900 dark:text-emerald-100 mb-0.5 flex items-center gap-2">
+                      Image Calibrated: {scan.calibration.pixelsPerMm} px/mm
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                        {scan.calibration.referenceType} ({scan.calibration.referenceDimensionMm} mm)
+                      </span>
+                    </div>
+                    Physical character heights have been mathematically calibrated from packaging reference dimensions and evaluated against statutory minimum thresholds in Rule 9 Schedule II Table I & II.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsCalibrateOpen(true)}
+                  className="px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-900 dark:text-emerald-100 text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Recalibrate
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 flex items-start justify-between gap-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <div className="font-bold text-sm text-amber-900 dark:text-amber-100 mb-0.5 flex items-center gap-2">
+                      Statutory Uncalibrated Photograph Notice &bull; Physical Verification Required
+                    </div>
+                    Under the Legal Metrology (Packaged Commodities) Rules, 2011, <strong>exact physical font size in millimeters cannot be legally determined from an uncalibrated photograph</strong>. Declarations requiring physical height confirmation are marked as <strong>REVIEW</strong>. Provide packaging reference dimensions to enable millimeter calibration.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsCalibrateOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Ruler className="w-4 h-4" />
+                  Calibrate Dimensions
+                </button>
+              </div>
+            )}
+
+            {/* Readability Assessment KPI summary cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="glass rounded-2xl p-4 border border-border/50 text-center shadow-sm">
+                <div className="text-xl font-black text-foreground">
+                  {isCalibrated ? `${scan.calibration.pixelsPerMm} px/mm` : 'Uncalibrated'}
+                </div>
+                <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mt-0.5">Scale Resolution</div>
+              </div>
+
+              <div className="glass rounded-2xl p-4 border border-emerald-500/30 bg-emerald-500/5 text-center shadow-sm">
+                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{readPassCount}</div>
+                <div className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 tracking-wider mt-0.5">Rule 9 Pass</div>
+              </div>
+
+              <div className="glass rounded-2xl p-4 border border-amber-500/30 bg-amber-500/5 text-center shadow-sm">
+                <div className="text-2xl font-black text-amber-600 dark:text-amber-400">{readReviewCount}</div>
+                <div className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300 tracking-wider mt-0.5">Review Required</div>
+              </div>
+
+              <div className="glass rounded-2xl p-4 border border-rose-500/30 bg-rose-500/5 text-center shadow-sm">
+                <div className="text-2xl font-black text-rose-600 dark:text-rose-400">{readFailCount}</div>
+                <div className="text-[10px] uppercase font-bold text-rose-700 dark:text-rose-300 tracking-wider mt-0.5">Non-Compliant</div>
+              </div>
+            </div>
+
+            {/* Readability & Font-Size Assessment Master Table */}
+            <div className="glass dark:glass-dark rounded-3xl overflow-hidden border border-border/50 shadow-xl">
+              <div className="p-4 border-b border-border/50 bg-black/5 dark:bg-white/5 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-primary" />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-foreground">
+                    Declaration Readability & Font-Size Assessment Ledger
+                  </h3>
+                </div>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  Legal Reference: Rule 9 & Schedule II (Packaged Commodities Rules)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/50 bg-black/10 dark:bg-white/5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                      <th className="py-3 px-4">Declaration</th>
+                      <th className="py-3 px-3">Detected Text</th>
+                      <th className="py-3 px-3">Bounding Box</th>
+                      <th className="py-3 px-3">Readability Status</th>
+                      <th className="py-3 px-3">Est. Character Size</th>
+                      <th className="py-3 px-2 text-center">Conf.</th>
+                      <th className="py-3 px-3">Applicable Requirement</th>
+                      <th className="py-3 px-4 text-center">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {readabilityAssessments.map((item, idx) => {
+                      const isSelected = selectedReadabilityItem?.declaration === item.declaration;
+                      return (
+                        <tr
+                          key={idx}
+                          onClick={() => setSelectedReadabilityItem(item)}
+                          className={cn(
+                            "cursor-pointer transition-colors duration-150",
+                            isSelected 
+                              ? "bg-primary/10 font-medium" 
+                              : "hover:bg-black/5 dark:hover:bg-white/5"
+                          )}
+                        >
+                          {/* 1. Declaration */}
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-foreground flex items-center gap-1.5">
+                              {item.declaration}
+                            </div>
+                            <div className="text-[10px] font-mono text-primary mt-0.5">
+                              {item.ruleNumber || item.ruleId}
+                            </div>
+                          </td>
+
+                          {/* 2. Detected Text */}
+                          <td className="py-3.5 px-3 max-w-[140px]">
+                            {item.detectedText && item.detectedText !== 'Not detected on package label' ? (
+                              <span className="font-mono text-[11px] text-foreground bg-black/5 dark:bg-white/5 px-2 py-1 rounded-md block truncate" title={item.detectedText}>
+                                {item.detectedText}
+                              </span>
+                            ) : (
+                              <span className="italic text-muted-foreground text-[11px]">
+                                Not detected
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 3. Bounding Box */}
+                          <td className="py-3.5 px-3">
+                            <div className="font-mono text-[10px] text-muted-foreground bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded inline-block">
+                              [{item.boundingBox?.x || 0}%, {item.boundingBox?.y || 0}%, {item.boundingBox?.width || 0}% × {item.boundingBox?.height || 0}%]
+                            </div>
+                          </td>
+
+                          {/* 4. Readability Status */}
+                          <td className="py-3.5 px-3">
+                            <div className="space-y-1">
+                              <span className={cn(
+                                "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase inline-flex items-center gap-1",
+                                item.readabilityStatus === 'CLEAR & DISTINCT' ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" :
+                                item.readabilityStatus.includes('BLUR') ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" :
+                                item.readabilityStatus.includes('CONTRAST') ? "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30" :
+                                item.readabilityStatus.includes('OBSTRUCTED') ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30" :
+                                item.readabilityStatus.includes('SMALL') ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" :
+                                "bg-zinc-500/15 text-zinc-500 border border-zinc-500/30"
+                              )}>
+                                {item.readabilityStatus}
+                              </span>
+                              {item.metrics && (
+                                <div className="text-[9px] text-muted-foreground font-mono">
+                                  Blur: {item.metrics.blurScore || 85} &bull; Contrast: {item.metrics.contrastRatio || 55}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 5. Estimated Character Size */}
+                          <td className="py-3.5 px-3">
+                            {item.isCalibrated ? (
+                              <div>
+                                <span className="font-bold font-mono text-sm text-primary">
+                                  ~{item.characterHeightMm} mm
+                                </span>
+                                <span className="text-[10px] text-muted-foreground ml-1">
+                                  ({item.characterHeightPx} px)
+                                </span>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-mono text-xs font-bold text-foreground">
+                                  ~{item.characterHeightPx} px
+                                </span>
+                                <span className="text-[9px] block text-amber-600 dark:text-amber-400 font-semibold">
+                                  (uncalibrated photo)
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 6. Confidence */}
+                          <td className="py-3.5 px-2 text-center">
+                            <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                              {Math.round((item.confidence || 0.94) * 100)}%
+                            </span>
+                          </td>
+
+                          {/* 7. Applicable Requirement */}
+                          <td className="py-3.5 px-3 max-w-[190px]">
+                            <p className="text-[11px] text-muted-foreground line-clamp-2" title={item.applicableRequirement}>
+                              {item.applicableRequirement}
+                            </p>
+                          </td>
+
+                          {/* 8. Result (PASS / FAIL / REVIEW) */}
+                          <td className="py-3.5 px-4 text-center">
+                            <span className={cn(
+                              "text-[11px] px-2.5 py-1 rounded-full font-black uppercase tracking-wider inline-flex items-center gap-1",
+                              item.result === 'PASS' ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40" :
+                              item.result === 'REVIEW' ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40" :
+                              "bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40"
+                            )}>
+                              {item.result === 'PASS' && <Check className="w-3 h-3" />}
+                              {item.result === 'REVIEW' && <HelpCircle className="w-3 h-3" />}
+                              {item.result === 'FAIL' && <X className="w-3 h-3" />}
+                              {item.result}
+                            </span>
+                            {item.result === 'REVIEW' && (
+                              <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-0.5">
+                                Physical verification req.
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Selected Declaration Optical Diagnostic Inspector Drawer */}
+            {selectedReadabilityItem && (
+              <div className="glass dark:glass-dark rounded-3xl p-5 border border-border/50 shadow-xl space-y-4 animate-in fade-in duration-150">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/40">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <h4 className="text-sm font-black text-foreground">
+                      Optical Diagnostic: {selectedReadabilityItem.declaration}
+                    </h4>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      ({selectedReadabilityItem.ruleNumber})
+                    </span>
+                  </div>
+
+                  <span className={cn(
+                    "px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider",
+                    selectedReadabilityItem.result === 'PASS' ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40" :
+                    selectedReadabilityItem.result === 'REVIEW' ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40" :
+                    "bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40"
+                  )}>
+                    Assessment Result: {selectedReadabilityItem.result}
+                  </span>
+                </div>
+
+                {/* Statutory Explanation Notice */}
+                <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-border/40 text-xs text-foreground leading-relaxed">
+                  <strong>Statutory Assessment Rationale:</strong> {selectedReadabilityItem.explanation}
+                </div>
+
+                {/* Optical Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-border/40 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Blur & Sharpness</span>
+                    <div className="font-bold text-foreground flex items-center justify-between">
+                      <span>{selectedReadabilityItem.metrics?.blurDetected ? 'Blurry' : 'Sharp'}</span>
+                      <span className="font-mono text-primary">{selectedReadabilityItem.metrics?.blurScore || 85}/100</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-border/40 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Contrast Ratio</span>
+                    <div className="font-bold text-foreground flex items-center justify-between">
+                      <span>{selectedReadabilityItem.metrics?.lowContrast ? 'Low Contrast' : 'High Contrast'}</span>
+                      <span className="font-mono text-primary">{selectedReadabilityItem.metrics?.contrastRatio || 55}/100</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-border/40 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Surface & Glare</span>
+                    <div className="font-bold text-foreground">
+                      {selectedReadabilityItem.metrics?.obstructionDetected ? 'Obstruction/Glare' : 'Clear Surface'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-border/40 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Character Height</span>
+                    <div className="font-bold text-foreground">
+                      {selectedReadabilityItem.isCalibrated 
+                        ? `${selectedReadabilityItem.characterHeightMm} mm (Calibrated)` 
+                        : `${selectedReadabilityItem.characterHeightPx} px (Uncalibrated)`}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Requirement details */}
+                <div className="text-xs text-muted-foreground pt-2 border-t border-border/30 flex items-center justify-between">
+                  <span>Applicable Mandate: <strong>{selectedReadabilityItem.applicableRequirement}</strong></span>
+                  {!selectedReadabilityItem.isCalibrated && (
+                    <button
+                      onClick={() => setIsCalibrateOpen(true)}
+                      className="text-primary hover:underline font-bold inline-flex items-center gap-1"
+                    >
+                      <Ruler className="w-3.5 h-3.5" /> Calibrate to test font height in mm
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         </div>
 
@@ -1036,6 +1621,174 @@ export default function ResultsPage() {
           </div>
         </div>
       </div>
+
+      {/* Packaging Dimension Calibration Modal Dialog */}
+      {isCalibrateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="glass dark:glass-dark rounded-3xl max-w-lg w-full p-6 border border-border/60 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2.5">
+                <Ruler className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-black text-foreground">
+                  Packaging Dimension Calibration
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsCalibrateOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Statutory font height requirements under <strong>Rule 9 Schedule II</strong> specify minimum numeral/letter dimensions in millimeters (e.g. 1.0mm, 1.5mm, 2.0mm, 4.0mm). Enter the physical packaging dimensions to establish the optical millimeter scale.
+            </p>
+
+            {calibrationError && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+                {calibrationError}
+              </div>
+            )}
+
+            {calibrationSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                {calibrationSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleCalibrate} className="space-y-4">
+              {/* Reference Dimension Selector */}
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1.5 uppercase tracking-wider">
+                  Reference Type
+                </label>
+                <select
+                  value={calibReferenceType}
+                  onChange={(e) => setCalibReferenceType(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-border/50 text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                >
+                  <option value="PACKAGING_HEIGHT">Total Packaging Height (Vertical Container Span)</option>
+                  <option value="PACKAGING_WIDTH">Total Packaging Width (Horizontal Container Span)</option>
+                  <option value="KNOWN_MARKER">Known Marker / Vernier Calibration Reticle</option>
+                  <option value="CUSTOM_DIMENSION">Direct Optical Scale Override (px/mm)</option>
+                </select>
+              </div>
+
+              {calibReferenceType !== 'CUSTOM_DIMENSION' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                      Physical Dimension
+                    </label>
+                    <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 p-0.5 rounded-lg text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (calibUnit === 'mm') {
+                            setCalibDimensionValue((Number(calibDimensionValue) / 10).toString());
+                            setCalibUnit('cm');
+                          }
+                        }}
+                        className={cn(
+                          "px-2 py-0.5 rounded font-bold transition-all",
+                          calibUnit === 'cm' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                        )}
+                      >
+                        cm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (calibUnit === 'cm') {
+                            setCalibDimensionValue((Number(calibDimensionValue) * 10).toString());
+                            setCalibUnit('mm');
+                          }
+                        }}
+                        className={cn(
+                          "px-2 py-0.5 rounded font-bold transition-all",
+                          calibUnit === 'mm' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                        )}
+                      >
+                        mm
+                      </button>
+                    </div>
+                  </div>
+
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    required
+                    value={calibDimensionValue}
+                    onChange={(e) => setCalibDimensionValue(e.target.value)}
+                    placeholder={`e.g. ${calibUnit === 'cm' ? '20' : '200'}`}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-border/50 text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+
+                  {/* Quick Presets */}
+                  <div className="pt-2">
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block mb-1">
+                      Quick Package Category Presets
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: 'Small Pouch / Sachet (12 cm)', val: calibUnit === 'cm' ? '12' : '120' },
+                        { label: 'Bottle / Carton (20 cm)', val: calibUnit === 'cm' ? '20' : '200' },
+                        { label: 'Cereal / Box (26 cm)', val: calibUnit === 'cm' ? '26' : '260' },
+                        { label: 'Large Tin / Jar (32 cm)', val: calibUnit === 'cm' ? '32' : '320' },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setCalibDimensionValue(preset.val)}
+                          className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-primary/15 text-[11px] text-muted-foreground hover:text-primary transition-colors border border-border/40"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5 uppercase tracking-wider">
+                    Optical Density Scale (Pixels per Millimeter)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.1"
+                    required
+                    value={customPxPerMm}
+                    onChange={(e) => setCustomPxPerMm(e.target.value)}
+                    placeholder="e.g. 14.50 px/mm"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-border/50 text-foreground text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-border/40 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCalibrateOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground text-xs font-bold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCalibrating}
+                  className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  {isCalibrating ? 'Calibrating...' : 'Apply Calibration & Re-evaluate'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
