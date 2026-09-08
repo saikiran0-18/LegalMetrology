@@ -64,7 +64,12 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
     const imagePath = req.file.path;
 
     // 1. OCR Extraction
-    const rawText = await performOCR(imagePath);
+    let rawText = '';
+    try {
+      rawText = await performOCR(imagePath);
+    } catch (ocrErr) {
+      console.warn('Tesseract OCR warning (proceeding with fallback extraction):', ocrErr.message);
+    }
 
     // 2. Information Extraction
     const extractedInfo = await extractInformation(rawText, imagePath);
