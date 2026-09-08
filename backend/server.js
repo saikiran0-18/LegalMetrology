@@ -44,7 +44,11 @@ app.use('/api/scan', scanLimiter);
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+const evidenceDir = path.join(uploadsDir, 'evidence');
+if (!fs.existsSync(evidenceDir)) {
+  fs.mkdirSync(evidenceDir, { recursive: true });
 }
 
 // Middleware

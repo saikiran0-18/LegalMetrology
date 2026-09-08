@@ -48,11 +48,49 @@ const scanSchema = new mongoose.Schema({
       approvalStatus: String,
       approvedBy: String,
       approvedDate: Date,
-      amendments: String
+      amendments: String,
+      // Evidence Management Attributes
+      evidenceId: { type: String, default: null },
+      declarationType: { type: String, default: 'General Declaration' },
+      violationCategory: { type: String, default: 'Missing Mandatory Declaration' },
+      highlightedRegion: {
+        x: { type: Number, default: 10 },
+        y: { type: Number, default: 10 },
+        width: { type: Number, default: 35 },
+        height: { type: Number, default: 20 }
+      },
+      croppedEvidenceUrl: { type: String, default: null },
+      originalImagePath: { type: String, default: null },
+      extractedText: { type: String, default: '' },
+      aiConfidence: { type: Number, default: 0.90 },
+      officerVerificationStatus: {
+        type: String,
+        enum: ['AI_DETECTED', 'OFFICER_VERIFIED', 'OFFICER_REJECTED'],
+        default: 'AI_DETECTED'
+      },
+      officerComments: { type: String, default: '' },
+      verifiedBy: { type: String, default: null },
+      verifiedAt: { type: Date, default: null },
+      additionalEvidence: [
+        {
+          fileUrl: String,
+          originalName: String,
+          uploadedAt: { type: Date, default: Date.now },
+          notes: { type: String, default: '' }
+        }
+      ],
+      createdAt: { type: Date, default: Date.now }
     }
   ],
   score: { type: Number, default: 0 },
   riskLevel: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH'] },
+  legalEnforcementStatus: {
+    type: String,
+    enum: ['PENDING_OFFICER_REVIEW', 'LEGAL_VIOLATIONS_CONFIRMED', 'ALL_VIOLATIONS_DISMISSED', 'COMPLIANT'],
+    default: 'PENDING_OFFICER_REVIEW'
+  },
+  officerReviewedAt: { type: Date, default: null },
+  officerReviewedBy: { type: String, default: null },
   timestamp: { type: Date, default: Date.now },
 });
 
