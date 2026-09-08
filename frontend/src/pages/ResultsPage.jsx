@@ -111,6 +111,48 @@ export default function ResultsPage() {
     doc.save(`PackSure_Report_${scan._id.substring(0, 8)}.pdf`);
   };
 
+  const handleExportCSV = () => {
+    // Generate editable CSV format
+    const rows = [
+      ['PackSure AI - Legal Metrology Compliance Inspection Report'],
+      ['Scan ID', scan._id],
+      ['Date', new Date(scan.timestamp).toLocaleString()],
+      ['Overall Score', `${scan.score}%`],
+      ['Risk Level', scan.riskLevel],
+      [''],
+      ['--- MANDATORY DECLARATIONS DETECTED ---'],
+      ['Field', 'Detected Value']
+    ];
+
+    Object.entries(scan.extractedInfo || {}).forEach(([k, v]) => {
+      rows.push([k.replace(/([A-Z])/g, ' $1').trim().toUpperCase(), `"${String(v || '').replace(/"/g, '""')}"`]);
+    });
+
+    rows.push(['']);
+    rows.push(['--- RULE EVALUATIONS (2011 RULES) ---']);
+    rows.push(['Rule ID', 'Rule Name', 'Status', 'Severity', 'Explanation', 'Recommendation']);
+
+    (scan.ruleResults || []).forEach(r => {
+      rows.push([
+        r.ruleId || '',
+        `"${(r.ruleName || '').replace(/"/g, '""')}"`,
+        r.status || '',
+        r.severity || '',
+        `"${(r.explanation || '').replace(/"/g, '""')}"`,
+        `"${(r.recommendation || '').replace(/"/g, '""')}"`
+      ]);
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `PackSure_Report_${scan._id.substring(0, 8)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto transition-colors duration-500">
       <div className="mb-6 flex items-center justify-between relative z-10">
@@ -123,10 +165,22 @@ export default function ResultsPage() {
             <p className="text-muted-foreground text-sm">Scan ID: {scan._id}</p>
           </div>
         </div>
-        <button onClick={handleDownloadReport} className="flex items-center text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors shadow-md">
-          <Download className="w-4 h-4 mr-2" />
-          Download Report
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleExportCSV} 
+            className="flex items-center text-sm bg-card hover:bg-secondary border border-border px-3.5 py-2 rounded-xl font-medium transition-colors shadow-sm text-foreground"
+          >
+            <FileText className="w-4 h-4 mr-2 text-primary" />
+            Export CSV (Editable)
+          </button>
+          <button 
+            onClick={handleDownloadReport} 
+            className="flex items-center text-sm bg-primary text-primary-foreground px-4 py-2 rounded-xl font-semibold hover:bg-primary/90 transition-colors shadow-md shadow-primary/20"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download PDF
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative z-10">
