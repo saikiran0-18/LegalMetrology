@@ -60,9 +60,18 @@ app.use('/api/history', historyRoutes);
 app.use('/api/rules', rulesRoutes);
 
 // MongoDB connection
+const { seedRules } = require('./scripts/seedRules');
+
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/packsure')
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    // Ensure Central & State rules are seeded
+    try {
+      await seedRules();
+    } catch (seedErr) {
+      console.warn('Initial rule seeding skipped or failed:', seedErr.message);
+    }
+
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

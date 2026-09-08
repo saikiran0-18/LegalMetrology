@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, FileImage, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { UploadCloud, CheckCircle2, ArrowRight, X, ShieldAlert, MapPin, Landmark, Sparkles } from 'lucide-react';
 import axios from 'axios';
 import { API_URL, cn } from '../lib/utils';
 
@@ -10,26 +10,55 @@ export default function ScanPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressStep, setProgressStep] = useState(0);
+  const [selectedState, setSelectedState] = useState('Telangana');
+  const [availableStates, setAvailableStates] = useState([
+    'Telangana',
+    'Maharashtra',
+    'Karnataka',
+    'Tamil Nadu',
+    'Delhi',
+    'Gujarat',
+    'Central (All India)'
+  ]);
+
   const navigate = useNavigate();
 
-  const handleDrag = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setIsDragging(true);
-    } else if (e.type === 'dragleave') {
-      setIsDragging(false);
-    }
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/rules/states`);
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          const list = [...res.data];
+          if (!list.includes('Central (All India)')) {
+            list.push('Central (All India)');
+          }
+          setAvailableStates(list);
+        }
+      } catch (e) {
+        console.warn('Could not fetch state list from API, using standard states:', e.message);
+      }
+    };
+    fetchStates();
   }, []);
 
-  const handleDrop = useCallback((e) => {
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsDragging(true);
+    } else if (e.type === "dragleave") {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileSelection(e.dataTransfer.files[0]);
     }
-  }, []);
+  };
 
   const handleChange = (e) => {
     e.preventDefault();
@@ -50,10 +79,10 @@ export default function ScanPage() {
 
   const steps = [
     'Image received',
-    'Detecting text...',
-    'Extracting product information...',
-    'Applying compliance rules...',
-    'Generating results...'
+    'Detecting text & dimensions...',
+    'Extracting statutory declarations...',
+    `Loading Central Rules + ${selectedState !== 'Central (All India)' ? selectedState : 'National'} Rules...`,
+    'Generating compliance audit...'
   ];
 
   const handleAnalyze = async () => {
@@ -61,13 +90,14 @@ export default function ScanPage() {
     
     setIsProcessing(true);
     
-    // Simulate progression for UI while backend processes
     const progressInterval = setInterval(() => {
       setProgressStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
-    }, 1200);
+    }, 1100);
 
     const formData = new FormData();
     formData.append('productImage', file);
+    formData.append('inspectionState', selectedState);
+    formData.append('inspectionDate', new Date().toISOString());
 
     try {
       const response = await axios.post(`${API_URL}/api/scan`, formData, {
@@ -94,11 +124,62 @@ export default function ScanPage() {
     <div className="p-8 max-w-5xl mx-auto h-full flex flex-col items-center justify-center relative transition-colors duration-500">
       <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-primary/20 blur-[150px] rounded-full pointer-events-none"></div>
       
-      <div className="text-center mb-12 relative z-10">
+      <div className="text-center mb-8 relative z-10">
         <h1 className="text-5xl font-black text-foreground tracking-tight mb-4">Analyze Product Label</h1>
         <p className="text-muted-foreground text-xl max-w-2xl mx-auto">
-          Upload packaging images for instant AI verification against Legal Metrology Rules, 2011.
+          Verify packaging against both <strong>Central Legal Metrology Rules, 2011</strong> and <strong>State Enforcement Rules</strong>.
         </p>
+      </div>
+
+      {/* State & Jurisdiction Selector Panel */}
+      <div className="w-full max-w-3xl mb-8 relative z-10">
+        <div className="glass dark:glass-dark bg-card/80 dark:bg-card/40 rounded-2xl p-5 border border-border/60 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div>
+              <label htmlFor="state-selector" className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                Inspection Jurisdiction (State)
+              </label>
+              <div className="text-sm font-semibold text-foreground">
+                Select the State where inspection is being conducted:
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              id="state-selector"
+              value={selectedState}
+              onChange={(e) => setSelectedState(e.target.value)}
+              disabled={isProcessing}
+              className="bg-black/5 dark:bg-white/5 border border-border/70 text-foreground font-semibold text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary shadow-inner cursor-pointer w-full sm:w-56"
+            >
+              {availableStates.map((st) => (
+                <option key={st} value={st} className="bg-card text-foreground">
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Dynamic Rule Scope Notification */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-2 text-xs">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Landmark className="w-4 h-4 text-primary" />
+            <span>
+              Active Rule Scope: <strong className="text-foreground">Central Rules (14)</strong>
+              {selectedState !== 'Central (All India)' && (
+                <> + <strong className="text-primary">{selectedState} State Enforcement Rules</strong></>
+              )}
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+            Dynamic Dual Jurisdiction
+          </span>
+        </div>
       </div>
 
       <div className="w-full relative z-10">
@@ -119,8 +200,8 @@ export default function ScanPage() {
               <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300 shadow-inner">
                 <UploadCloud className="w-12 h-12 text-primary" />
               </div>
-              <h3 className="text-2xl font-bold text-foreground mb-3">Drag & Drop your image here</h3>
-              <p className="text-muted-foreground mb-8 text-lg">or click to browse from your computer</p>
+              <h3 className="text-2xl font-bold text-foreground mb-3">Drag & Drop your package label image</h3>
+              <p className="text-muted-foreground mb-8 text-lg">or click to browse from your device</p>
               
               <label 
                 className="cursor-pointer bg-primary text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all hover:-translate-y-1 inline-block border border-transparent"
@@ -139,57 +220,74 @@ export default function ScanPage() {
               {!isProcessing && (
                 <button 
                   onClick={() => { setFile(null); setPreview(null); }}
-                  className="absolute top-6 right-6 bg-red-500/80 text-white rounded-full p-2.5 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 hover:scale-110 backdrop-blur-md shadow-lg"
+                  className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
+                  title="Remove image"
                 >
-                  <XCircle className="w-6 h-6" />
+                  <X className="w-5 h-5" />
                 </button>
               )}
             </div>
-            
-            <div className="md:w-1/2 p-10 flex flex-col justify-center border-t md:border-t-0 md:border-l border-border/50 bg-gradient-to-br from-black/5 dark:from-white/5 to-transparent">
-              <div className="flex items-start mb-8 p-4 rounded-2xl bg-white/50 dark:bg-white/5 border border-border/50 shadow-sm">
-                <div className="p-3 bg-primary/10 dark:bg-primary/20 rounded-xl mr-4 shadow-inner">
-                  <FileImage className="w-6 h-6 text-primary" />
+
+            <div className="md:w-1/2 p-10 flex flex-col justify-between border-t md:border-t-0 md:border-l border-border/50">
+              <div>
+                <h3 className="text-2xl font-bold text-foreground mb-2">Package Image Ready</h3>
+                <p className="text-muted-foreground mb-6">
+                  {file?.name} ({(file?.size / (1024 * 1024)).toFixed(2)} MB)
+                </p>
+
+                {/* State Confirmation Card */}
+                <div className="mb-6 p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-border/50 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-muted-foreground block">Selected Jurisdiction</span>
+                    <strong className="text-foreground text-sm flex items-center gap-1.5 mt-0.5">
+                      <MapPin className="w-3.5 h-3.5 text-primary" /> {selectedState}
+                    </strong>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const next = availableStates[(availableStates.indexOf(selectedState) + 1) % availableStates.length];
+                      setSelectedState(next);
+                    }}
+                    disabled={isProcessing}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    Change
+                  </button>
                 </div>
-                <div className="overflow-hidden">
-                  <h3 className="font-semibold text-lg truncate text-foreground">{file?.name}</h3>
-                  <p className="text-sm text-primary font-medium mt-1">{(file?.size / (1024 * 1024)).toFixed(2)} MB</p>
-                </div>
+
+                {isProcessing && (
+                  <div className="space-y-4 mb-6 animate-in fade-in duration-300">
+                    <div className="flex justify-between text-sm font-semibold text-foreground mb-1">
+                      <span>Analyzing Compliance</span>
+                      <span>{Math.round(((progressStep + 1) / steps.length) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden shadow-inner">
+                      <div 
+                        className="bg-primary h-2 rounded-full transition-all duration-500" 
+                        style={{ width: `${((progressStep + 1) / steps.length) * 100}%` }}
+                      ></div>
+                    </div>
+                    
+                    <div className="space-y-3 mt-6">
+                      {steps.map((step, idx) => (
+                        <div key={idx} className={`flex items-center text-sm transition-opacity duration-300 ${idx <= progressStep ? 'opacity-100 text-foreground font-medium' : 'opacity-40 text-muted-foreground'}`}>
+                          <CheckCircle2 className={`w-4 h-4 mr-3 ${idx < progressStep ? 'text-primary' : idx === progressStep ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {!isProcessing ? (
-                <button 
+              {!isProcessing && (
+                <button
                   onClick={handleAnalyze}
-                  className="w-full bg-gradient-to-r from-primary to-purple-600 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all text-lg hover:-translate-y-1 relative overflow-hidden group"
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 flex items-center justify-center group"
                 >
-                  <div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full skew-x-12 transition-transform duration-700"></div>
-                  Start AI Analysis
+                  <span>Evaluate for {selectedState}</span>
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </button>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex items-center text-primary font-bold text-xl mb-4">
-                    <Loader2 className="w-6 h-6 mr-3 animate-spin" />
-                    AI is Processing...
-                  </div>
-                  <div className="space-y-4">
-                    {steps.map((step, idx) => (
-                      <div key={idx} className={cn(
-                        "flex items-center text-sm transition-all duration-500 p-3 rounded-lg border",
-                        idx < progressStep ? "text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-400/10 font-medium border-transparent" : 
-                        idx === progressStep ? "text-foreground bg-black/5 dark:bg-white/10 shadow-inner border-border/50 font-medium translate-x-2" : "text-muted-foreground opacity-40 border-transparent"
-                      )}>
-                        {idx < progressStep ? (
-                          <CheckCircle2 className="w-5 h-5 mr-3 flex-shrink-0" />
-                        ) : idx === progressStep ? (
-                          <Loader2 className="w-5 h-5 mr-3 animate-spin text-primary flex-shrink-0" />
-                        ) : (
-                          <div className="w-5 h-5 rounded-full border-2 border-current mr-3 flex-shrink-0" />
-                        )}
-                        {step}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               )}
             </div>
           </div>

@@ -74,8 +74,14 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
     // 2. Information Extraction
     const extractedInfo = await extractInformation(rawText, imagePath);
 
-    // 3. Compliance Evaluation
-    const complianceResults = evaluateCompliance(extractedInfo);
+    const inspectionState = req.body.inspectionState || 'Central (All India)';
+    const inspectionDate = req.body.inspectionDate ? new Date(req.body.inspectionDate) : new Date();
+
+    // 3. Compliance Evaluation (Dynamic jurisdiction: Central + selected State rules)
+    const complianceResults = await evaluateCompliance(extractedInfo, {
+      inspectionState,
+      inspectionDate
+    });
 
     const finalRawText = extractedInfo.rawText || rawText;
 
@@ -83,6 +89,8 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
     const newScan = new Scan({
       userId: req.user?._id !== 'demo_user' ? req.user?._id : undefined,
       inspectorName: req.user?.name || 'Inspector Officer',
+      inspectionState: complianceResults.inspectionState || inspectionState,
+      inspectionDate: complianceResults.inspectionDate || inspectionDate,
       productCategory: complianceResults.productCategory || extractedInfo.productCategory || 'General Packaged Commodity',
       imagePath: imagePath.replace(/\\/g, '/'), // normalize path
       extractedText: finalRawText,
@@ -97,6 +105,8 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
     res.json({
       success: true,
       scanId: newScan._id,
+      inspectionState,
+      inspectionDate,
       ...complianceResults,
       extractedInfo
     });
