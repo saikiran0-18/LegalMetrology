@@ -1,13 +1,37 @@
-import { useState } from 'react';
-import { User, Bell, Shield, Key, Moon, Globe, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Bell, Shield, Key, Globe, Save } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Settings() {
+  const { user, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [organization, setOrganization] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      setFullName(user.name || '');
+      setEmail(user.email || '');
+      setDesignation(user.designation || 'Compliance Officer');
+      setOrganization(user.organization || 'Legal Metrology Dept');
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await updateProfile({
+      name: fullName.trim(),
+      designation: designation.trim(),
+      organization: organization.trim()
+    });
+    setSaving(false);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), 2500);
   };
 
   const tabs = [
@@ -55,19 +79,39 @@ export default function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Full Name</label>
-                    <input type="text" defaultValue="Admin User" className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                    <input 
+                      type="text" 
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Email Address</label>
-                    <input type="email" defaultValue="admin@packsure.ai" className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                    <input 
+                      type="email" 
+                      disabled
+                      value={email}
+                      className="w-full px-3 py-2 border border-border rounded-md bg-black/5 dark:bg-white/5 text-muted-foreground cursor-not-allowed" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Role / Designation</label>
-                    <input type="text" defaultValue="Compliance Officer" className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                    <input 
+                      type="text" 
+                      value={designation}
+                      onChange={(e) => setDesignation(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Organization</label>
-                    <input type="text" defaultValue="Legal Metrology Dept" className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                    <input 
+                      type="text" 
+                      value={organization}
+                      onChange={(e) => setOrganization(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50" 
+                    />
                   </div>
                 </div>
               </div>
@@ -149,9 +193,12 @@ export default function Settings() {
           <div className="mt-10 pt-6 border-t border-border flex justify-end">
             <button 
               onClick={handleSave}
-              className="bg-primary text-primary-foreground px-6 py-2 rounded-md font-medium shadow-sm hover:bg-primary/90 transition-all flex items-center"
+              disabled={saving}
+              className="bg-primary text-primary-foreground px-6 py-2 rounded-md font-medium shadow-sm hover:bg-primary/90 transition-all flex items-center disabled:opacity-50"
             >
-              {saved ? (
+              {saving ? (
+                <>Saving Changes...</>
+              ) : saved ? (
                 <>Saved Successfully!</>
               ) : (
                 <>

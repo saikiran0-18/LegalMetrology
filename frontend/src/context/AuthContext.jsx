@@ -5,7 +5,10 @@ import { API_URL } from '../lib/utils';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('packsure_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [token, setToken] = useState(() => localStorage.getItem('packsure_token'));
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +30,6 @@ export function AuthProvider({ children }) {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
-          // If 401 from protected endpoint, clear stale credentials
           if (!error.config.url.includes('/api/auth/')) {
             logout();
           }
@@ -42,7 +44,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Fetch current user if token exists on mount
+  // Fetch fresh user profile if token exists on mount
   useEffect(() => {
     const verifySession = async () => {
       if (!token) {
@@ -56,6 +58,7 @@ export function AuthProvider({ children }) {
         });
         if (res.data?.user) {
           setUser(res.data.user);
+          localStorage.setItem('packsure_user', JSON.stringify(res.data.user));
         }
       } catch (err) {
         console.warn('Session verification failed, logging out:', err.message);
@@ -75,12 +78,40 @@ export function AuthProvider({ children }) {
     setUser(sessionUser);
   };
 
+  const register = async (email, password, name) => {
+    try {
+      const res = await axios.post(`${API_URL}/api/auth/register`, { email, password, name });
+      if (res.data?.token && res.data?.user) {
+        saveAuthSession(res.data.token, res.data.user);
+        return { success: true, user: res.data.user };
+      }
+      return { success: false, error: 'Registration response invalid' };
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || err.message || 'Registration failed';
+      return { success: false, error: errorMsg };
+    }
+  };
+
+  const login = async (email, password) => {
+    try {
+      const res = await axios.post(`${API_URL}/api/auth/login`, { email, password });
+      if (res.data?.token && res.data?.user) {
+        saveAuthSession(res.data.token, res.data.user);
+        return { success: true, user: res.data.user };
+      }
+      return { success: false, error: 'Login response invalid' };
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || err.message || 'Login failed';
+      return { success: false, error: errorMsg };
+    }
+  };
+
   const loginWithGoogle = async (credential) => {
     try {
       const res = await axios.post(`${API_URL}/api/auth/google`, { credential });
       if (res.data?.token && res.data?.user) {
         saveAuthSession(res.data.token, res.data.user);
-        return { success: true };
+        return { success: true, user: res.data.user };
       }
       return { success: false, error: 'Incomplete authentication response' };
     } catch (err) {
@@ -94,11 +125,25 @@ export function AuthProvider({ children }) {
       const res = await axios.post(`${API_URL}/api/auth/demo`, { role });
       if (res.data?.token && res.data?.user) {
         saveAuthSession(res.data.token, res.data.user);
-        return { success: true };
+        return { success: true, user: res.data.user };
       }
       return { success: false, error: 'Demo authentication failed' };
     } catch (err) {
       const errorMsg = err.response?.data?.error || err.message || 'Demo login failed';
+      return { success: false, error: errorMsg };
+    }
+  };
+
+  const updateProfile = async (profileData) => {
+    try {
+      const res = await axios.put(`${API_URL}/api/auth/profile`, profileData);
+      if (res.data?.user) {
+        saveAuthSession(res.data.token || token, res.data.user);
+        return { success: true, user: res.data.user };
+      }
+      return { success: false, error: 'Profile update failed' };
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || err.message || 'Failed to save profile';
       return { success: false, error: errorMsg };
     }
   };
@@ -117,8 +162,12 @@ export function AuthProvider({ children }) {
         token,
         loading,
         isAuthenticated: !!token && !!user,
+        isProfileComplete: Boolean(user?.profileCompleted),
+        register,
+        login,
         loginWithGoogle,
         loginWithDemo,
+        updateProfile,
         logout
       }}
     >

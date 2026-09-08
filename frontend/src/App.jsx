@@ -12,6 +12,8 @@ import RulesLibrary from './pages/RulesLibrary';
 import History from './pages/History';
 import Settings from './pages/Settings';
 
+import OnboardingPage from './pages/OnboardingPage';
+
 function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -83,7 +85,7 @@ function Sidebar() {
               <div className="text-xs font-bold text-foreground truncate">{user.name || 'Legal Officer'}</div>
               <div className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
                 <UserCheck className="w-3 h-3 text-emerald-500 flex-shrink-0" />
-                <span className="truncate">{user.role || 'Inspector'}</span>
+                <span className="truncate">{user.designation || user.role || 'Inspector'}</span>
               </div>
             </div>
             <button
@@ -132,6 +134,14 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute allowIncompleteProfile={true}>
+                <OnboardingPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/*"
             element={
