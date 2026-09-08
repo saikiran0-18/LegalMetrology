@@ -167,53 +167,54 @@ const attachEvidenceToResults = async (ruleResults, originalImagePath) => {
     fs.mkdirSync(evidenceDir, { recursive: true });
   }
 
-  const enriched = [];
+  const prefix = Date.now().toString(36).toUpperCase();
 
-  for (let i = 0; i < ruleResults.length; i++) {
-    const r = ruleResults[i];
-    const ruleMeta = STATUTORY_METADATA[r.ruleId] || {
-      declarationType: r.ruleName || 'Statutory Declaration',
-      violationCategory: 'Legal Metrology Requirement Non-Compliance',
-      defaultRegion: { x: 10 + (i * 5) % 40, y: 15 + (i * 8) % 65, width: 75, height: 18 },
-      confidence: 0.90
-    };
+  const enriched = await Promise.all(
+    ruleResults.map(async (r, i) => {
+      const ruleMeta = STATUTORY_METADATA[r.ruleId] || {
+        declarationType: r.ruleName || 'Statutory Declaration',
+        violationCategory: 'Legal Metrology Requirement Non-Compliance',
+        defaultRegion: { x: 10 + (i * 5) % 40, y: 15 + (i * 8) % 65, width: 75, height: 18 },
+        confidence: 0.90
+      };
 
-    const evidenceId = `EV-${Date.now().toString(36).toUpperCase()}-${(i + 1).toString().padStart(2, '0')}`;
-    const highlightedRegion = ruleMeta.defaultRegion;
+      const evidenceId = `EV-${prefix}-${(i + 1).toString().padStart(2, '0')}`;
+      const highlightedRegion = ruleMeta.defaultRegion;
 
-    // Generate cropped evidence image
-    let croppedEvidenceUrl = null;
-    if (originalImagePath) {
-      croppedEvidenceUrl = await generateEvidenceCrop(originalImagePath, highlightedRegion, evidenceId);
-    }
+      // Generate cropped evidence image
+      let croppedEvidenceUrl = null;
+      if (originalImagePath) {
+        croppedEvidenceUrl = await generateEvidenceCrop(originalImagePath, highlightedRegion, evidenceId);
+      }
 
-    // Determine normalized original relative image path
-    let relOrigPath = null;
-    if (originalImagePath) {
-      const norm = originalImagePath.replace(/\\/g, '/');
-      const parts = norm.split('uploads/');
-      relOrigPath = parts.length > 1 ? `/uploads/${parts[1]}` : norm;
-    }
+      // Determine normalized original relative image path
+      let relOrigPath = null;
+      if (originalImagePath) {
+        const norm = originalImagePath.replace(/\\/g, '/');
+        const parts = norm.split('uploads/');
+        relOrigPath = parts.length > 1 ? `/uploads/${parts[1]}` : norm;
+      }
 
-    enriched.push({
-      ...r,
-      evidenceId,
-      declarationType: ruleMeta.declarationType,
-      violationCategory: ruleMeta.violationCategory,
-      highlightedRegion,
-      croppedEvidenceUrl,
-      originalImagePath: relOrigPath,
-      extractedText: (r.detectedValue && r.detectedValue !== 'Not detected') ? r.detectedValue : '',
-      aiConfidence: ruleMeta.confidence,
-      // Default: AI Detected. NEVER automatically becomes final legal violation without officer sign-off!
-      officerVerificationStatus: 'AI_DETECTED',
-      officerComments: '',
-      verifiedBy: null,
-      verifiedAt: null,
-      additionalEvidence: [],
-      createdAt: new Date()
-    });
-  }
+      return {
+        ...r,
+        evidenceId,
+        declarationType: ruleMeta.declarationType,
+        violationCategory: ruleMeta.violationCategory,
+        highlightedRegion,
+        croppedEvidenceUrl,
+        originalImagePath: relOrigPath,
+        extractedText: (r.detectedValue && r.detectedValue !== 'Not detected') ? r.detectedValue : '',
+        aiConfidence: ruleMeta.confidence,
+        // Default: AI Detected. NEVER automatically becomes final legal violation without officer sign-off!
+        officerVerificationStatus: 'AI_DETECTED',
+        officerComments: '',
+        verifiedBy: null,
+        verifiedAt: null,
+        additionalEvidence: [],
+        createdAt: new Date()
+      };
+    })
+  );
 
   return enriched;
 };

@@ -111,26 +111,20 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       inspectionDate
     });
 
-    // D. Generate Evidence & Bounding Boxes for Every Evaluated Rule
-    const enrichedRuleResults = await attachEvidenceToResults(complianceResults.ruleResults, imagePath);
+    // D. Parallel Execution: Generate Evidence, Font-Size Readability, and Image Quality Concurrently
+    const [enrichedRuleResults, readabilityAssessments, imageQuality] = await Promise.all([
+      attachEvidenceToResults(complianceResults.ruleResults, imagePath),
+      assessDeclarationReadability(imagePath, extractedInfo, null).catch(readErr => {
+        console.warn('Readability assessment warning:', readErr.message);
+        return [];
+      }),
+      assessOverallImageQuality(imagePath).catch(qualityErr => {
+        console.warn('Overall image quality assessment warning:', qualityErr.message);
+        return { isBlurry: false, blurScore: 85, clarityStatus: 'CRISP' };
+      })
+    ]);
+
     const legalEnforcementStatus = calculateLegalStatus(enrichedRuleResults);
-
-    // D2. Declaration Readability & Font-Size Assessment (Rule 9 / Schedule II)
-    let readabilityAssessments = [];
-    try {
-      readabilityAssessments = await assessDeclarationReadability(imagePath, extractedInfo, null);
-    } catch (readErr) {
-      console.warn('Readability assessment error:', readErr.message);
-    }
-
-    // D3. Overall Image Clarity & Blur Quality Assessment
-    let imageQuality = { isBlurry: false, blurScore: 85, clarityStatus: 'CRISP' };
-    try {
-      imageQuality = await assessOverallImageQuality(imagePath);
-    } catch (qualityErr) {
-      console.warn('Overall image quality assessment error:', qualityErr.message);
-    }
-
     const finalRawText = extractedInfo.rawText || rawText;
 
     // E. Save to Database
