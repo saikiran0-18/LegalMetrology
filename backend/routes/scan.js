@@ -78,6 +78,7 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
     const newScan = new Scan({
       userId: req.user?._id !== 'demo_user' ? req.user?._id : undefined,
       inspectorName: req.user?.name || 'Inspector Officer',
+      productCategory: complianceResults.productCategory || extractedInfo.productCategory || 'General Packaged Commodity',
       imagePath: imagePath.replace(/\\/g, '/'), // normalize path
       extractedText: finalRawText,
       extractedInfo: extractedInfo,

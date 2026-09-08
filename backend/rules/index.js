@@ -83,6 +83,7 @@ const evaluateCompliance = (extractedInfo) => {
   return {
     score: rawScore,
     riskLevel,
+    productCategory: extractedInfo.productCategory || 'General Packaged Commodity',
     ruleResults
   };
 };

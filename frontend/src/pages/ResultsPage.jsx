@@ -227,7 +227,7 @@ export default function ResultsPage() {
                 scan.score >= 90 ? "from-emerald-500 to-transparent" : 
                 scan.score >= 70 ? "from-amber-500 to-transparent" : "from-red-500 to-transparent")}></div>
               
-              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3 relative z-10">Compliance Score</p>
+              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-2 relative z-10">Compliance Score</p>
               
               <h2 className={cn("text-7xl font-black relative z-10 drop-shadow-2xl", 
                 scan.score >= 90 ? "text-emerald-500 dark:text-emerald-400" : 
@@ -235,10 +235,17 @@ export default function ResultsPage() {
                 {scan.score}%
               </h2>
               
-              <div className={cn("mt-6 px-4 py-1.5 text-sm font-black rounded-full border shadow-[0_0_15px_rgba(0,0,0,0.1)] relative z-10", 
-                scan.riskLevel === 'LOW' ? "text-emerald-700 bg-emerald-100 border-emerald-200 dark:text-emerald-400 dark:border-emerald-400/30 dark:bg-emerald-400/10" : 
-                scan.riskLevel === 'MEDIUM' ? "text-amber-700 bg-amber-100 border-amber-200 dark:text-amber-400 dark:border-amber-400/30 dark:bg-amber-400/10" : "text-red-700 bg-red-100 border-red-200 dark:text-red-400 dark:border-red-400/30 dark:bg-red-400/10")}>
-                {scan.riskLevel} RISK LEVEL
+              <div className="flex flex-col gap-2 mt-5 items-center w-full relative z-10">
+                <div className={cn("px-4 py-1 text-xs font-black rounded-full border shadow-sm", 
+                  scan.riskLevel === 'LOW' ? "text-emerald-700 bg-emerald-100 border-emerald-200 dark:text-emerald-400 dark:border-emerald-400/30 dark:bg-emerald-400/10" : 
+                  scan.riskLevel === 'MEDIUM' ? "text-amber-700 bg-amber-100 border-amber-200 dark:text-amber-400 dark:border-amber-400/30 dark:bg-amber-400/10" : "text-red-700 bg-red-100 border-red-200 dark:text-red-400 dark:border-red-400/30 dark:bg-red-400/10")}>
+                  {scan.riskLevel} RISK LEVEL
+                </div>
+
+                <div className="px-3 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                  <span>Category:</span>
+                  <span className="text-foreground">{scan.productCategory || scan.extractedInfo?.productCategory || 'General Packaged Commodity'}</span>
+                </div>
               </div>
             </div>
             
