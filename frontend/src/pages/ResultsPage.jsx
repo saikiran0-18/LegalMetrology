@@ -42,7 +42,7 @@ import {
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { cn, API_URL } from '../lib/utils';
+import { cn, API_URL, getImageUrl } from '../lib/utils';
 
 export default function ResultsPage() {
   const { id } = useParams();
@@ -619,10 +619,22 @@ export default function ResultsPage() {
             <div className="relative flex justify-center bg-black/5 dark:bg-black/40 rounded-2xl overflow-hidden p-2 min-h-[320px] items-center">
               <div className="relative inline-block max-w-full">
                 <img 
-                  src={`${API_URL}/${scan.imagePath}`} 
+                  src={getImageUrl(scan.imagePath)} 
                   alt="Scanned Product Packaging" 
                   className="max-h-96 w-auto object-contain rounded-xl shadow-lg ring-1 ring-border/40 select-none pointer-events-none"
-                  onError={(e) => { e.target.src = 'https://via.placeholder.com/350'; }}
+                  onError={(e) => {
+                    const filename = scan.imagePath ? scan.imagePath.split(/[\/\\]/).pop() : '';
+                    if (filename && !e.target.dataset.triedRelative) {
+                      e.target.dataset.triedRelative = 'true';
+                      e.target.src = `/uploads/${filename}`;
+                    } else if (filename && !e.target.dataset.triedPort5000) {
+                      e.target.dataset.triedPort5000 = 'true';
+                      e.target.src = `http://localhost:5000/uploads/${filename}`;
+                    } else if (filename && !e.target.dataset.triedIp) {
+                      e.target.dataset.triedIp = 'true';
+                      e.target.src = `http://127.0.0.1:5000/uploads/${filename}`;
+                    }
+                  }}
                 />
 
                 {/* Overlaid Interactive Bounding Boxes: Statutory Mode */}
@@ -1008,7 +1020,7 @@ export default function ResultsPage() {
                     <div className="flex flex-col sm:flex-row items-center gap-4 bg-background/80 p-3 rounded-xl border border-border/40">
                       {activeRule.croppedEvidenceUrl ? (
                         <img
-                          src={`${API_URL}${activeRule.croppedEvidenceUrl}`}
+                          src={getImageUrl(activeRule.croppedEvidenceUrl)}
                           alt="Cropped Evidence"
                           className="h-24 w-auto max-w-[160px] object-cover rounded-lg border border-border/60 shadow-sm"
                           onError={(e) => { e.target.style.display = 'none'; }}

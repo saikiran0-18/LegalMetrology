@@ -15,7 +15,7 @@ import {
   X
 } from 'lucide-react';
 import axios from 'axios';
-import { API_URL } from '../lib/utils';
+import { API_URL, getImageUrl } from '../lib/utils';
 
 // Helper to reliably resolve category even for older scans
 const resolveCategory = (scan) => {
@@ -281,7 +281,7 @@ export default function History() {
                         <div className="flex items-center">
                           <div className="h-12 w-12 rounded-xl bg-white border border-border flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
                             <img 
-                              src={`${API_URL}/${scan.imagePath}`} 
+                              src={getImageUrl(scan.imagePath)} 
                               alt="thumb" 
                               className="max-h-full max-w-full object-contain" 
                               onError={(e) => { e.target.src = 'https://via.placeholder.com/50'; }} 

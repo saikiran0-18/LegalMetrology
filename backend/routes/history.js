@@ -1,16 +1,27 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 const Scan = require('../models/Scan');
 const { requireAuth } = require('../middleware/auth');
 
 // Protect all history endpoints
 router.use(requireAuth);
 
+const normalizeScan = (doc) => {
+  if (!doc) return doc;
+  const s = doc.toObject ? doc.toObject() : { ...doc };
+  if (s.imagePath) {
+    const filename = path.basename(s.imagePath);
+    s.imagePath = `/uploads/${filename}`;
+  }
+  return s;
+};
+
 // Get all scans
 router.get('/', async (req, res) => {
   try {
     const scans = await Scan.find().sort({ timestamp: -1 });
-    res.json(scans);
+    res.json(scans.map(normalizeScan));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch history' });
   }
@@ -38,7 +49,7 @@ router.get('/:id', async (req, res) => {
       }
     }
 
-    res.json(scan);
+    res.json(normalizeScan(scan));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch scan details' });
   }

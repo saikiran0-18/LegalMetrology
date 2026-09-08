@@ -128,7 +128,7 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       inspectionState: complianceResults.inspectionState || inspectionState,
       inspectionDate: complianceResults.inspectionDate || inspectionDate,
       productCategory: complianceResults.productCategory || extractedInfo.productCategory || 'General Packaged Commodity',
-      imagePath: imagePath.replace(/\\/g, '/'), // normalize path
+      imagePath: `/uploads/${req.file.filename}`,
       extractedText: finalRawText,
       extractedInfo: extractedInfo,
       ruleResults: enrichedRuleResults,
