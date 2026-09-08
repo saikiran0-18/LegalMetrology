@@ -609,30 +609,30 @@ export default function ResultsPage() {
       {/* Legal Enforcement Principle Notice */}
       <div className="relative z-10">
         {pendingAiCount > 0 ? (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 flex items-start gap-3 shadow-sm">
-            <AlertOctagon className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-xs leading-relaxed">
-              <div className="font-bold text-sm text-amber-900 dark:text-amber-100 mb-0.5 flex items-center gap-2">
+          <div className="p-4 rounded-2xl bg-amber-100/90 border-2 border-amber-400 text-amber-950 flex items-start gap-3 shadow-md">
+            <AlertOctagon className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed text-amber-950">
+              <div className="font-black text-sm text-amber-950 mb-0.5 flex items-center gap-2">
                 Preliminary AI Audit &bull; {pendingAiCount} Item(s) Pending Officer Verification
               </div>
-              Under the Legal Metrology Act, 2009, <strong>AI detections cannot automatically become final legal violations without officer verification</strong>. Review each suspected anomaly below to formally Accept, Reject, or Edit before issuing an enforcement notice.
+              Under the Legal Metrology Act, 2009, <strong className="text-amber-950 font-black">AI detections cannot automatically become final legal violations without officer verification</strong>. Review each suspected anomaly below to formally Accept, Reject, or Edit before issuing an enforcement notice.
             </div>
           </div>
         ) : verifiedViolationsCount > 0 ? (
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-200 flex items-start gap-3 shadow-sm">
-            <ShieldCheck className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-            <div className="text-xs leading-relaxed">
-              <div className="font-bold text-sm text-rose-900 dark:text-rose-100 mb-0.5 flex items-center gap-2">
+          <div className="p-4 rounded-2xl bg-rose-100/90 border-2 border-rose-400 text-rose-950 flex items-start gap-3 shadow-md">
+            <ShieldCheck className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed text-rose-950">
+              <div className="font-black text-sm text-rose-950 mb-0.5 flex items-center gap-2">
                 Officer Verified Legal Violations ({verifiedViolationsCount}) &bull; Actionable for Enforcement
               </div>
-              The inspecting officer has verified and signed off on {verifiedViolationsCount} statutory violation(s). These items are legally binding and preserved in the official enforcement ledger.
+              The inspecting officer has verified and signed off on <strong className="text-rose-950 font-black">{verifiedViolationsCount} statutory violation(s)</strong>. These items are legally binding and preserved in the official enforcement ledger.
             </div>
           </div>
         ) : (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-start gap-3 shadow-sm">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div className="text-xs leading-relaxed">
-              <div className="font-bold text-sm text-emerald-900 dark:text-emerald-100 mb-0.5">
+          <div className="p-4 rounded-2xl bg-emerald-100/90 border-2 border-emerald-400 text-emerald-950 flex items-start gap-3 shadow-md">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed text-emerald-950">
+              <div className="font-black text-sm text-emerald-950 mb-0.5">
                 Product Label Verified Compliant
               </div>
               All mandatory declarations are legally compliant or any candidate anomalies have been dismissed by the inspecting officer.
@@ -643,13 +643,13 @@ export default function ResultsPage() {
 
       {/* Optical Blur & Image Clarity Advisory */}
       {scan.imageQuality?.isBlurry && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-100 flex items-start justify-between gap-4 shadow-sm relative z-10 animate-in fade-in duration-200">
+        <div className="p-4 rounded-2xl bg-amber-100/90 border-2 border-amber-400 text-amber-950 flex items-start justify-between gap-4 shadow-md relative z-10 animate-in fade-in duration-200">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-xs leading-relaxed">
-              <div className="font-bold text-sm text-amber-900 dark:text-amber-100 mb-0.5 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed text-amber-950">
+              <div className="font-black text-sm text-amber-950 mb-0.5 flex items-center gap-2">
                 Optical Blur Detected &bull; Quality Status: {scan.imageQuality.clarityStatus}
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-black">
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-300 text-amber-950 font-black border border-amber-500">
                   Clarity Score: {scan.imageQuality.blurScore}/100
                 </span>
               </div>
@@ -659,7 +659,7 @@ export default function ResultsPage() {
           <button
             type="button"
             onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Blur Inspection Lightbox')}
-            className="px-3 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-950 dark:text-amber-100 text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all shadow-sm"
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shrink-0 flex items-center gap-1.5 transition-all shadow-sm"
           >
             <ZoomIn className="w-3.5 h-3.5" />
             Inspect Blur
@@ -1457,11 +1457,11 @@ export default function ResultsPage() {
             {isCalibrated ? (
               <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200 flex items-start justify-between gap-4 shadow-sm">
                 <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                  <div className="text-xs leading-relaxed">
-                    <div className="font-bold text-sm text-emerald-900 dark:text-emerald-100 mb-0.5 flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed text-emerald-950">
+                    <div className="font-black text-sm text-emerald-950 mb-0.5 flex items-center gap-2">
                       Image Calibrated: {scan.calibration.pixelsPerMm} px/mm
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-200 text-emerald-950 font-black border border-emerald-300">
                         {scan.calibration.referenceType} ({scan.calibration.referenceDimensionMm} mm)
                       </span>
                     </div>
@@ -1470,26 +1470,26 @@ export default function ResultsPage() {
                 </div>
                 <button
                   onClick={() => setIsCalibrateOpen(true)}
-                  className="px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-900 dark:text-emerald-100 text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all"
+                  className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all shadow-sm"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Recalibrate
                 </button>
               </div>
             ) : (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 flex items-start justify-between gap-4 shadow-sm">
+              <div className="p-4 rounded-2xl bg-amber-100/90 border-2 border-amber-400 text-amber-950 flex items-start justify-between gap-4 shadow-md">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <div className="text-xs leading-relaxed">
-                    <div className="font-bold text-sm text-amber-900 dark:text-amber-100 mb-0.5 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed text-amber-950">
+                    <div className="font-black text-sm text-amber-950 mb-0.5 flex items-center gap-2">
                       Statutory Uncalibrated Photograph Notice &bull; Physical Verification Required
                     </div>
-                    Under the Legal Metrology (Packaged Commodities) Rules, 2011, <strong>exact physical font size in millimeters cannot be legally determined from an uncalibrated photograph</strong>. Declarations requiring physical height confirmation are marked as <strong>REVIEW</strong>. Provide packaging reference dimensions to enable millimeter calibration.
+                    Under the Legal Metrology (Packaged Commodities) Rules, 2011, <strong className="text-amber-950 font-black">exact physical font size in millimeters cannot be legally determined from an uncalibrated photograph</strong>. Declarations requiring physical height confirmation are marked as <strong className="text-amber-950 font-black">REVIEW</strong>. Provide packaging reference dimensions to enable millimeter calibration.
                   </div>
                 </div>
                 <button
                   onClick={() => setIsCalibrateOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 shadow-sm transition-all"
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shrink-0 flex items-center gap-1.5 shadow-sm transition-all"
                 >
                   <Ruler className="w-4 h-4" />
                   Calibrate Dimensions
