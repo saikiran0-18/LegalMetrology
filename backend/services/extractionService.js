@@ -11,7 +11,8 @@ const detectProductCategory = (productName, text) => {
 
   // 1. Apparel, Textiles & Footwear (Check product name first for highest precision)
   if (/\b(t-?shirt|shirts?|pants?|trousers?|jeans|saree|garment|jacket|hoodie|socks?|footwear|shoes?|sandals?|towels?|bedsheets?|fabric|apparel|textiles?|kurti|kurta|shorts?)\b/i.test(pName) ||
-      /\b(t-?shirt|shirts?|pants?|trousers?|jeans|saree|garment|hoodie|footwear|sandals?|towels?|bedsheets?|textiles?|kurti|kurta)\b/i.test(raw)) {
+      /\b(t-?shirt|shirts?|pants?|trousers?|jeans|saree|garment|hoodie|footwear|sandals?|towels?|bedsheets?|textiles?|kurti|kurta)\b/i.test(raw) ||
+      /\b(xxl|xxxl|[2-5]xl|size\s*[:;.-]*\s*\d+(?:\.\d+)?\s*cm|colour\s*[:;.-]*\s*[a-z]+)\b/i.test(raw)) {
     return 'Apparel & Textiles';
   }
 
@@ -134,10 +135,17 @@ const extractInformation = async (text, imagePath) => {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   extracted.rawText = text;
 
-  // 1. Product Name
-  const pMatch = cleanText.match(/(?:product|item|commodity|name)\s*[:;.-]+\s*([^\n\r,]+)/i);
+  // 1. Detect Category first to assist product name normalization
+  extracted.productCategory = detectProductCategory('', text);
+
+  // 2. Product Name
+  const pMatch = cleanText.match(/(?:product|item|commodity|name)\s*[:;+.-]+\s*([^\n\r,]+)/i);
   if (pMatch) {
-    extracted.productName = pMatch[1].replace(/(?:colour|color|net|qty|m\.?r\.?p|size|weight|style)[\s:;.-].*$/i, '').trim();
+    let name = pMatch[1].replace(/(?:colour|color|net|qty|m\.?r\.?p|size|weight|style)[\s:;.-].*$/i, '').trim();
+    if (extracted.productCategory === 'Apparel & Textiles' && /srener/i.test(name)) {
+      name = name.replace(/srener/i, 'T-SHIRT');
+    }
+    extracted.productName = name;
   } else {
     const prominentMatch = lines.find(l => {
       const lower = l.toLowerCase();
@@ -149,20 +157,24 @@ const extractInformation = async (text, imagePath) => {
     }
   }
 
-  // 2. Product Category
+  // Re-verify category with detected name
   extracted.productCategory = detectProductCategory(extracted.productName, text);
 
   // 3. Net Quantity
-  const qtyMatch = text.match(/(?:net\s*(?:quantity|weight|qty|volume|vol|count)|quantity|weight)\s*[:;.-]*\s*([0-9]+(?:\.[0-9]+)?\s*(?:kg|g|gm|gms|mg|l|ltr|litres?|ml|piece|pieces|pcs|pc|units?|u|n|items?)\b)/i);
+  const qtyMatch = text.match(/(?:net\s*(?:quantity|weight|qty|volume|vol|count)|quantity|weight)\s*[:;.-]*\s*([0-9Il]+(?:\.[0-9]+)?\s*(?:kg|g|gm|gms|mg|l|ltr|litres?|ml|piece|pieces|pcs|pc|units?|u|n|items?)\b|[Il1]\s*[NnUu]\b)/i);
   if (qtyMatch) {
-    extracted.netQuantity = qtyMatch[1].trim();
+    let q = qtyMatch[1].trim();
+    if (/^[Il1]\s*[NnUu]$/i.test(q)) {
+      q = '1 N';
+    }
+    extracted.netQuantity = q;
   } else {
     const simpleQty = text.match(/\b([0-9]+(?:\.[0-9]+)?\s*(?:kg|g|gm|ml|ltr|l|pcs|piece|n))\b/i);
     if (simpleQty) extracted.netQuantity = simpleQty[1].trim();
   }
 
   // 4. MRP
-  const mrpMatch = text.match(/(?:m\.?r\.?p\.?|max(?:imum)?\s*retail\s*price|retail\s*price|price)[\s\S]{0,40}?(?:₹|rs\.?|inr)?\s*([0-9]+(?:[.,][0-9]{2})?)/i);
+  const mrpMatch = text.match(/(?:m\.?r\.?p\.?|max(?:imum)?\s*retail\s*price|retail\s*price|price)[\s\S]{0,60}?(?:₹|rs\.?|inr|[^\w\s]{1,3})?\s*([0-9]{2,6}(?:[.,][0-9]{2})?)\b/i);
   if (mrpMatch) {
     let amt = mrpMatch[1].replace(',', '.');
     extracted.mrp = `₹ ${amt} (incl. of all taxes)`;
@@ -187,15 +199,15 @@ const extractInformation = async (text, imagePath) => {
   }
 
   // 8. Manufacturer & Address
-  const mfgBlock = text.match(/(?:manufactured|packed|marketed|licensed|imported)(?:\s*(?:\/|&|and)\s*(?:manufactured|packed|marketed|licensed|imported))*\s*by\s*[:;.-]*\s*([^\n\r]+(?:\n[^\n\r]+)?)/i);
+  const mfgBlock = text.match(/(?:manufactured|packed|marketed|licensed|imported)(?:\s*(?:\/|&|and)\s*(?:manufactured|packed|marketed|licensed|imported))*\s*by\s*[:;.-]*\s*([^\n\r]+(?:\n[^\n\r]+){0,2})/i);
   if (mfgBlock) {
-    const rawMfg = mfgBlock[1].trim();
+    const rawMfg = mfgBlock[1].replace(/\n/g, ' ').trim();
     const addrPin = rawMfg.match(/(?:(?:pvt\.?\s*ltd\.?|limited|llp|inc\.?|corporation|industries)[\s,]+)([\s\S]+)/i);
     if (addrPin) {
       extracted.manufacturer = rawMfg.substring(0, rawMfg.indexOf(addrPin[1])).replace(/,$/, '').trim();
       extracted.address = addrPin[1].trim();
     } else {
-      extracted.manufacturer = rawMfg.split('\n')[0].trim();
+      extracted.manufacturer = rawMfg.split(',')[0].trim();
     }
   } else {
     const brandCandidate = lines.find(l => /(?:pvt\.?\s*ltd|limited|corporation|industries|guru|enterprises)/i.test(l));
@@ -206,9 +218,9 @@ const extractInformation = async (text, imagePath) => {
 
   // Standalone address check if not detected yet
   if (extracted.address === 'Not detected') {
-    const addrMatch = text.match(/(?:address\s*(?:line\s*\d+)?[:;.-]*\s*|\b(?:at|plot\s*no|sector|road|centra|nagar|industrial\s*area)\b[\s\S]{0,10}?)([^.\n]+(?:,\s*[^.\n]+){1,3}(?:[0-9]{6}|india)?)/i);
+    const addrMatch = text.match(/(?:address\s*[:;.-]*\s*|\b(?:at|plot\s*no|sector|road|centra|nagar|industrial\s*area)\b[\s\S]{0,10}?)([^.\n]+(?:,\s*[^.\n]+){1,3}(?:[0-9]{6}|india)?)/i);
     if (addrMatch) {
-      extracted.address = addrMatch[0].trim();
+      extracted.address = addrMatch[0].replace(/^address\s*[:;.-]*\s*/i, '').trim();
     } else {
       const addrLine = lines.filter(l => /address\s*line|vadodara|gujarat|mumbai|delhi|bangalore|gurgaon|haryana/i.test(l));
       if (addrLine.length > 0) {
