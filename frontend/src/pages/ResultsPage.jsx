@@ -13,7 +13,8 @@ import {
   Landmark, 
   ExternalLink,
   ShieldCheck,
-  Filter
+  Filter,
+  GitBranch
 } from 'lucide-react';
 import axios from 'axios';
 import jsPDF from 'jspdf';
@@ -493,9 +494,19 @@ export default function ResultsPage() {
                       <div className="font-semibold text-foreground text-sm flex items-center gap-1.5">
                         <BookOpen className="w-4 h-4 text-primary" /> {activeRule.sourceDocument}
                       </div>
-                      <div className="text-[11px] text-muted-foreground flex items-center gap-4 pt-1 border-t border-border/40">
-                        <span>Rule Section: <strong>{activeRule.ruleNumber || 'N/A'}</strong></span>
-                        <span>Version: <strong>{activeRule.version || '2011.1'}</strong></span>
+                      <div className="text-[11px] text-muted-foreground flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/40">
+                        <div className="flex items-center gap-4">
+                          <span>Rule Section: <strong>{activeRule.ruleNumber || 'N/A'}</strong></span>
+                          <span>Version: <strong className="text-foreground">v{activeRule.version || '1.0'}</strong></span>
+                        </div>
+                        {activeRule.ruleId && (
+                          <Link
+                            to={`/rules/history/${activeRule.ruleId}`}
+                            className="inline-flex items-center gap-1 font-bold text-primary hover:underline text-[11px]"
+                          >
+                            <GitBranch className="w-3 h-3" /> Audit Version History
+                          </Link>
+                        )}
                       </div>
                     </div>
 

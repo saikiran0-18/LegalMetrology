@@ -42,7 +42,13 @@ const scanSchema = new mongoose.Schema({
       sourceDocument: String,
       sourceUrl: String,
       version: String,
-      weight: Number
+      weight: Number,
+      effectiveFrom: Date,
+      effectiveTo: Date,
+      approvalStatus: String,
+      approvedBy: String,
+      approvedDate: Date,
+      amendments: String
     }
   ],
   score: { type: Number, default: 0 },

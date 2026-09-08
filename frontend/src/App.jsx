@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, Scan, BookOpen, Clock, Settings as SettingsIcon, LogOut, UserCheck } from 'lucide-react';
+import { Home, Scan, BookOpen, Clock, Settings as SettingsIcon, LogOut, UserCheck, GitBranch } from 'lucide-react';
 import { cn } from './lib/utils';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import ScanPage from './pages/ScanPage';
 import ResultsPage from './pages/ResultsPage';
 import RulesLibrary from './pages/RulesLibrary';
+import RuleHistoryPage from './pages/RuleHistoryPage';
 import History from './pages/History';
 import Settings from './pages/Settings';
 
@@ -21,8 +22,9 @@ function Sidebar() {
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: Scan, label: 'Scan Product', path: '/scan' },
-    { icon: Clock, label: 'History', path: '/history' },
+    { icon: Clock, label: 'Scan History', path: '/history' },
     { icon: BookOpen, label: 'Rules Library', path: '/rules' },
+    { icon: GitBranch, label: 'Rule History', path: '/rules/history' },
     { icon: SettingsIcon, label: 'Settings', path: '/settings' },
   ];
 
@@ -119,6 +121,8 @@ function AppLayout() {
             <Route path="/scan" element={<ScanPage />} />
             <Route path="/results/:id" element={<ResultsPage />} />
             <Route path="/rules" element={<RulesLibrary />} />
+            <Route path="/rules/history" element={<RuleHistoryPage />} />
+            <Route path="/rules/history/:ruleId" element={<RuleHistoryPage />} />
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

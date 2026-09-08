@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Book, ShieldAlert, Search, Building2, MapPin, ExternalLink, Scale, Tag, Calendar, Filter } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Book, ShieldAlert, Search, Building2, MapPin, ExternalLink, Scale, Tag, Calendar, Filter, GitBranch } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../lib/utils';
 
@@ -80,11 +81,21 @@ export default function RulesLibrary() {
             </p>
           </div>
           
-          <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/5 dark:bg-white/5 border border-border/50 text-xs font-semibold text-muted-foreground">
-            <span>Total Active Rules:</span>
-            <span className="font-bold text-foreground bg-primary/20 text-primary px-2.5 py-0.5 rounded-full">
-              {rules.length}
-            </span>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/rules/history"
+              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-primary/15 hover:bg-primary/25 border border-primary/30 text-xs font-bold text-primary transition-all shadow-sm"
+            >
+              <GitBranch className="w-4 h-4" />
+              Rule Version Control & Ledger
+            </Link>
+
+            <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/5 dark:bg-white/5 border border-border/50 text-xs font-semibold text-muted-foreground">
+              <span>Total Active Rules:</span>
+              <span className="font-bold text-foreground bg-primary/20 text-primary px-2.5 py-0.5 rounded-full">
+                {rules.length}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -267,16 +278,26 @@ export default function RulesLibrary() {
                       )}
                     </div>
 
-                    {rule.sourceUrl && (
-                      <a 
-                        href={rule.sourceUrl} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline font-semibold"
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/rules/history/${rule.ruleId}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all"
                       >
-                        Official Source <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
+                        <GitBranch className="w-3 h-3" />
+                        Version History
+                      </Link>
+
+                      {rule.sourceUrl && (
+                        <a 
+                          href={rule.sourceUrl} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline font-semibold"
+                        >
+                          Official Source <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

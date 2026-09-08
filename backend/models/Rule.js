@@ -77,6 +77,23 @@ const ruleSchema = new mongoose.Schema({
     enum: ['HIGH', 'MEDIUM', 'LOW'], 
     default: 'MEDIUM' 
   },
+  approvalStatus: {
+    type: String,
+    enum: ['Approved', 'Pending', 'Draft', 'Rejected'],
+    default: 'Approved'
+  },
+  approvedBy: {
+    type: String,
+    default: 'Director, Legal Metrology (Ministry of Consumer Affairs)'
+  },
+  approvedDate: {
+    type: Date,
+    default: Date.now
+  },
+  amendments: {
+    type: String,
+    default: 'Statutory enactment'
+  },
   evaluatorKey: { 
     type: String, 
     required: true 

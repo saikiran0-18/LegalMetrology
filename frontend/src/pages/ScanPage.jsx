@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, CheckCircle2, ArrowRight, X, ShieldAlert, MapPin, Landmark, Sparkles } from 'lucide-react';
+import { UploadCloud, CheckCircle2, ArrowRight, X, ShieldAlert, MapPin, Landmark, Sparkles, Calendar } from 'lucide-react';
 import axios from 'axios';
 import { API_URL, cn } from '../lib/utils';
 
@@ -11,6 +11,7 @@ export default function ScanPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressStep, setProgressStep] = useState(0);
   const [selectedState, setSelectedState] = useState('Telangana');
+  const [inspectionDate, setInspectionDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [availableStates, setAvailableStates] = useState([
     'Telangana',
     'Maharashtra',
@@ -97,7 +98,7 @@ export default function ScanPage() {
     const formData = new FormData();
     formData.append('productImage', file);
     formData.append('inspectionState', selectedState);
-    formData.append('inspectionDate', new Date().toISOString());
+    formData.append('inspectionDate', new Date(inspectionDate).toISOString());
 
     try {
       const response = await axios.post(`${API_URL}/api/scan`, formData, {
@@ -148,13 +149,26 @@ export default function ScanPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 bg-black/5 dark:bg-white/5 border border-border/70 rounded-xl px-3 py-1.5 shadow-inner">
+              <Calendar className="w-3.5 h-3.5 text-primary" />
+              <input
+                id="inspection-date"
+                type="date"
+                value={inspectionDate}
+                onChange={(e) => setInspectionDate(e.target.value)}
+                disabled={isProcessing}
+                className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer"
+                title="Statutory Inspection Date"
+              />
+            </div>
+
             <select
               id="state-selector"
               value={selectedState}
               onChange={(e) => setSelectedState(e.target.value)}
               disabled={isProcessing}
-              className="bg-black/5 dark:bg-white/5 border border-border/70 text-foreground font-semibold text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary shadow-inner cursor-pointer w-full sm:w-56"
+              className="bg-black/5 dark:bg-white/5 border border-border/70 text-foreground font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary shadow-inner cursor-pointer"
             >
               {availableStates.map((st) => (
                 <option key={st} value={st} className="bg-card text-foreground">

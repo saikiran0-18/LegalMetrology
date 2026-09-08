@@ -1,4 +1,7 @@
+const mongoose = require('mongoose');
 const Rule = require('../models/Rule');
+const RuleVersion = require('../models/RuleVersion');
+const { centralRules, stateRules, ruleVersions } = require('../scripts/seedRules');
 
 // Central rule evaluator imports
 const rule06_1_a_Manufacturer = require('./rule06_1_a_Manufacturer');
@@ -124,81 +127,146 @@ const stateEvaluators = {
   }
 };
 
-const mongoose = require('mongoose');
-const { centralRules, stateRules } = require('../scripts/seedRules');
-
 /**
  * Fetch applicable rules dynamically based on:
  * 1. inspectionState
  * 2. productCategory
- * 3. inspectionDate
+ * 3. inspectionDate (temporal version resolution)
  * 4. jurisdiction
- * 5. effectiveDates
+ * 5. effectiveDates (effectiveFrom <= inspectionDate <= effectiveTo)
  */
 const getApplicableRules = async ({ inspectionState, productCategory, inspectionDate = new Date() }) => {
-  // 1. If MongoDB is connected, query the live database
+  const targetDate = inspectionDate instanceof Date ? inspectionDate : new Date(inspectionDate);
+
+  // 1. If MongoDB is connected, query RuleVersion collection
   if (mongoose.connection && mongoose.connection.readyState === 1) {
-    const query = {
-      status: 'Active',
-      effectiveFrom: { $lte: inspectionDate },
-      $or: [
-        { effectiveTo: null },
-        { effectiveTo: { $gte: inspectionDate } }
-      ]
-    };
-
-    if (productCategory && productCategory !== 'All') {
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { productCategory: 'All' },
-          { productCategory: productCategory }
-        ]
-      });
-    }
-
-    if (inspectionState && inspectionState !== 'All' && inspectionState !== 'Central (All India)') {
-      query.$or = [
-        { jurisdiction: 'Central' },
-        { jurisdiction: 'State', stateName: inspectionState }
-      ];
-    } else {
-      query.jurisdiction = 'Central';
-    }
-
     try {
-      const dbRules = await Rule.find(query).sort({ jurisdiction: 1, ruleId: 1 }).lean();
-      if (dbRules && dbRules.length > 0) {
-        return dbRules;
+      const versionQuery = {
+        approvalStatus: 'Approved',
+        effectiveFrom: { $lte: targetDate },
+        $or: [
+          { effectiveTo: null },
+          { effectiveTo: { $gte: targetDate } }
+        ]
+      };
+
+      if (productCategory && productCategory !== 'All') {
+        versionQuery.$and = versionQuery.$and || [];
+        versionQuery.$and.push({
+          $or: [
+            { productCategory: 'All' },
+            { productCategory: productCategory }
+          ]
+        });
+      }
+
+      if (inspectionState && inspectionState !== 'All' && inspectionState !== 'Central (All India)') {
+        versionQuery.$or = [
+          { jurisdiction: 'Central' },
+          { jurisdiction: 'State', stateName: inspectionState }
+        ];
+      } else {
+        versionQuery.jurisdiction = 'Central';
+      }
+
+      // Sort by ruleId, effectiveFrom descending, version descending
+      const versionDocs = await RuleVersion.find(versionQuery)
+        .sort({ ruleId: 1, effectiveFrom: -1, version: -1 })
+        .lean();
+
+      if (versionDocs && versionDocs.length > 0) {
+        // Deduplicate by ruleId (ensure exactly 1 active version per ruleId on this inspection date)
+        const resolvedMap = new Map();
+        for (const doc of versionDocs) {
+          if (!resolvedMap.has(doc.ruleId)) {
+            resolvedMap.set(doc.ruleId, {
+              ruleId: doc.ruleId,
+              ruleNumber: doc.ruleNumber,
+              title: doc.title,
+              description: doc.requirement,
+              requirement: doc.requirement,
+              jurisdiction: doc.jurisdiction,
+              stateName: doc.stateName,
+              productCategory: doc.productCategory,
+              effectiveFrom: doc.effectiveFrom,
+              effectiveTo: doc.effectiveTo,
+              sourceDocument: doc.sourceDocument,
+              sourceUrl: doc.sourceUrl,
+              version: doc.version,
+              approvalStatus: doc.approvalStatus,
+              approvedBy: doc.approvedBy,
+              approvedDate: doc.approvedDate,
+              amendments: doc.amendments,
+              status: doc.status,
+              weight: doc.weight || 10,
+              severity: doc.severity || 'MEDIUM',
+              evaluatorKey: doc.evaluatorKey
+            });
+          }
+        }
+        return Array.from(resolvedMap.values());
       }
     } catch (err) {
-      console.warn('Could not query rules from database, using in-memory defaults:', err.message);
+      console.warn('Could not query rule versions from database, trying fallback:', err.message);
     }
   }
 
-  // 2. In-memory fallback: dynamically filter Central + State rules
-  const allInMemory = [...centralRules, ...stateRules];
-  return allInMemory.filter(rule => {
-    // Active status check
-    if (rule.status !== 'Active') return false;
+  // 2. In-memory multi-version fallback
+  const inMemMap = new Map();
+  const versionsToScan = Array.isArray(ruleVersions) && ruleVersions.length > 0 
+    ? ruleVersions 
+    : [...centralRules, ...stateRules];
 
-    // Date effective check
-    if (rule.effectiveFrom && rule.effectiveFrom > inspectionDate) return false;
-    if (rule.effectiveTo && rule.effectiveTo < inspectionDate) return false;
+  for (const v of versionsToScan) {
+    if (v.approvalStatus && v.approvalStatus !== 'Approved') continue;
+    const vEffFrom = new Date(v.effectiveFrom || '2011-04-01');
+    const vEffTo = v.effectiveTo ? new Date(v.effectiveTo) : null;
 
-    // Category check
-    if (productCategory && productCategory !== 'All' && rule.productCategory !== 'All' && rule.productCategory !== productCategory) {
-      return false;
-    }
+    // Temporal validity check
+    if (vEffFrom > targetDate) continue;
+    if (vEffTo && vEffTo < targetDate) continue;
 
     // Jurisdiction check
-    if (rule.jurisdiction === 'Central') return true;
-    if (rule.jurisdiction === 'State') {
-      return inspectionState && inspectionState !== 'All' && inspectionState !== 'Central (All India)' && rule.stateName === inspectionState;
+    if (v.jurisdiction === 'State') {
+      if (!inspectionState || inspectionState === 'All' || inspectionState === 'Central (All India)' || v.stateName !== inspectionState) {
+        continue;
+      }
     }
 
-    return false;
-  });
+    // Category check
+    if (productCategory && productCategory !== 'All' && v.productCategory !== 'All' && v.productCategory !== productCategory) {
+      continue;
+    }
+
+    // Deduplicate by ruleId keeping newest effectiveFrom / version
+    if (!inMemMap.has(v.ruleId) || inMemMap.get(v.ruleId).effectiveFrom < vEffFrom) {
+      inMemMap.set(v.ruleId, {
+        ruleId: v.ruleId,
+        ruleNumber: v.ruleNumber,
+        title: v.title,
+        description: v.requirement || v.description,
+        requirement: v.requirement || v.description,
+        jurisdiction: v.jurisdiction,
+        stateName: v.stateName,
+        productCategory: v.productCategory || 'All',
+        effectiveFrom: v.effectiveFrom,
+        effectiveTo: v.effectiveTo,
+        sourceDocument: v.sourceDocument,
+        sourceUrl: v.sourceUrl,
+        version: v.version || '1.0',
+        approvalStatus: v.approvalStatus || 'Approved',
+        approvedBy: v.approvedBy || 'Director of Legal Metrology',
+        approvedDate: v.approvedDate || new Date('2011-03-01'),
+        amendments: v.amendments || 'Statutory Enactment',
+        status: v.status || 'Active',
+        weight: v.weight || 10,
+        severity: v.severity || 'MEDIUM',
+        evaluatorKey: v.evaluatorKey
+      });
+    }
+  }
+
+  return Array.from(inMemMap.values());
 };
 
 /**
@@ -279,13 +347,19 @@ const evaluateCompliance = async (extractedInfo, options = {}) => {
       ruleId: rule.ruleId,
       ruleNumber: rule.ruleNumber || rule.ruleId,
       ruleName: rule.title,
-      requirement: rule.description,
+      requirement: rule.requirement || rule.description,
       jurisdiction: rule.jurisdiction || 'Central',
       stateName: rule.stateName || null,
       productCategory: rule.productCategory || 'All',
       sourceDocument: rule.sourceDocument || 'Legal Metrology Rules',
       sourceUrl: rule.sourceUrl || '',
       version: rule.version || '1.0',
+      effectiveFrom: rule.effectiveFrom,
+      effectiveTo: rule.effectiveTo,
+      approvalStatus: rule.approvalStatus || 'Approved',
+      approvedBy: rule.approvedBy || 'Director of Legal Metrology',
+      approvedDate: rule.approvedDate || null,
+      amendments: rule.amendments || '',
       status: evalResult.status,
       explanation: evalResult.message,
       recommendation: evalResult.recommendation || '',
