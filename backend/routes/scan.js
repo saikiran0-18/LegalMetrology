@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { performOCR } = require('../services/ocrService');
-const { extractInformation } = require('../services/extractionService');
+const { extractInformation, setRuntimeGeminiApiKey, getGeminiApiKey } = require('../services/extractionService');
 const { evaluateCompliance } = require('../rules');
 const { attachEvidenceToResults, calculateLegalStatus } = require('../services/evidenceService');
 const { assessDeclarationReadability, reassessReadabilityWithCalibration, assessOverallImageQuality } = require('../services/readabilityService');
@@ -95,8 +95,12 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       console.warn('Tesseract OCR warning (proceeding with fallback extraction):', ocrErr.message);
     }
 
-    // B. Information Extraction
-    const extractedInfo = await extractInformation(rawText, imagePath);
+    // B. Information Extraction (Supports Gemini Multimodal API if configured)
+    const customGeminiKey = req.headers['x-gemini-api-key'] || req.body.geminiApiKey;
+    if (customGeminiKey && customGeminiKey.trim().length > 10) {
+      setRuntimeGeminiApiKey(customGeminiKey.trim());
+    }
+    const extractedInfo = await extractInformation(rawText, imagePath, customGeminiKey);
 
     const inspectionState = req.body.inspectionState || 'Central (All India)';
     const inspectionDate = req.body.inspectionDate ? new Date(req.body.inspectionDate) : new Date();
@@ -408,6 +412,112 @@ router.post('/:id/calibrate', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Calibration error:', err);
     res.status(500).json({ error: 'Failed to calibrate scan image: ' + err.message });
+  }
+});
+
+// 6. Gemini Configuration Status
+router.get('/gemini-config', requireAuth, (req, res) => {
+  const currentKey = getGeminiApiKey();
+  const hasKey = Boolean(currentKey && currentKey !== 'your_api_key_here' && currentKey.trim().length > 10);
+  const keyPreview = hasKey ? `${currentKey.substring(0, 6)}...${currentKey.substring(currentKey.length - 4)}` : '';
+  res.json({
+    hasKey,
+    keyPreview
+  });
+});
+
+// 7. Update/Save Gemini API Key
+router.post('/gemini-config', requireAuth, async (req, res) => {
+  try {
+    const { apiKey } = req.body;
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 10) {
+      return res.status(400).json({ error: 'Please provide a valid Gemini API Key.' });
+    }
+
+    const trimmedKey = apiKey.trim();
+    setRuntimeGeminiApiKey(trimmedKey);
+
+    // Persist to .env if possible
+    try {
+      const envPath = path.join(__dirname, '../.env');
+      if (fs.existsSync(envPath)) {
+        let envContent = fs.readFileSync(envPath, 'utf8');
+        if (envContent.includes('GEMINI_API_KEY=')) {
+          envContent = envContent.replace(/GEMINI_API_KEY=.*(\r?\n|$)/, `GEMINI_API_KEY=${trimmedKey}$1`);
+        } else {
+          envContent += `\nGEMINI_API_KEY=${trimmedKey}\n`;
+        }
+        fs.writeFileSync(envPath, envContent, 'utf8');
+      }
+    } catch (envErr) {
+      console.warn('Could not write to .env file, saved in runtime memory:', envErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Gemini API Key saved and activated successfully!',
+      hasKey: true,
+      keyPreview: `${trimmedKey.substring(0, 6)}...${trimmedKey.substring(trimmedKey.length - 4)}`
+    });
+  } catch (err) {
+    console.error('Failed to save Gemini key:', err);
+    res.status(500).json({ error: 'Failed to save Gemini API key: ' + err.message });
+  }
+});
+
+// 8. Re-Extract Declarations with Gemini AI on an Existing Scan
+router.post('/:id/re-extract', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { apiKey } = req.body;
+
+    if (apiKey && apiKey.trim().length > 10) {
+      setRuntimeGeminiApiKey(apiKey.trim());
+    }
+
+    const scan = await Scan.findById(id);
+    if (!scan) return res.status(404).json({ error: 'Scan not found' });
+
+    let absoluteImagePath = scan.imagePath;
+    if (!path.isAbsolute(absoluteImagePath)) {
+      const cleanRel = scan.imagePath.replace(/^\/?uploads\/?/, '');
+      absoluteImagePath = path.join(__dirname, '../uploads', cleanRel);
+    }
+
+    if (!fs.existsSync(absoluteImagePath)) {
+      return res.status(400).json({ error: 'Original product image not found on server' });
+    }
+
+    // Call extractInformation with Gemini override
+    const effectiveKey = apiKey || getGeminiApiKey();
+    const updatedExtracted = await extractInformation(scan.extractedText || '', absoluteImagePath, effectiveKey);
+
+    scan.extractedInfo = updatedExtracted;
+    scan.productCategory = updatedExtracted.productCategory || scan.productCategory;
+
+    // Re-evaluate compliance based on new extracted fields
+    const complianceResults = await evaluateCompliance(updatedExtracted, {
+      inspectionState: scan.inspectionState || 'Central (All India)',
+      inspectionDate: scan.inspectionDate || new Date()
+    });
+
+    const enrichedRuleResults = await attachEvidenceToResults(complianceResults.ruleResults, absoluteImagePath);
+    scan.ruleResults = enrichedRuleResults;
+    scan.score = complianceResults.score;
+    scan.riskLevel = complianceResults.riskLevel;
+    scan.legalEnforcementStatus = calculateLegalStatus(enrichedRuleResults);
+
+    await scan.save();
+
+    res.json({
+      success: true,
+      message: 'Product declarations re-extracted successfully with Gemini AI!',
+      scan,
+      extractedInfo: scan.extractedInfo
+    });
+  } catch (err) {
+    console.error('Re-extraction error:', err);
+    res.status(500).json({ error: 'Failed to re-extract with Gemini: ' + err.message });
   }
 });
 
