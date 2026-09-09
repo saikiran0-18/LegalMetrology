@@ -8,6 +8,7 @@ const { extractInformation, setRuntimeGeminiApiKey, getGeminiApiKey } = require(
 const { evaluateCompliance } = require('../rules');
 const { attachEvidenceToResults, calculateLegalStatus } = require('../services/evidenceService');
 const { assessDeclarationReadability, reassessReadabilityWithCalibration, assessOverallImageQuality } = require('../services/readabilityService');
+const { enhanceImageIfBlurry } = require('../services/imageEnhancementService');
 const sharp = require('sharp');
 const Scan = require('../models/Scan');
 
@@ -87,47 +88,65 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
 
     const imagePath = req.file.path;
 
-    // A. OCR Extraction
+    // A. AI Blur Detection & Automatic Packaging Image Enhancement
+    let enhancement = { isEnhanced: false, enhancedFullPath: null, enhancedRelativePath: null, appliedFilters: [] };
+    try {
+      enhancement = await enhanceImageIfBlurry(imagePath);
+    } catch (enhErr) {
+      console.warn('Image enhancement warning (proceeding with original):', enhErr.message);
+    }
+    const effectiveOcrPath = (enhancement.isEnhanced && enhancement.enhancedFullPath) ? enhancement.enhancedFullPath : imagePath;
+
+    // B. OCR Extraction
     let rawText = '';
     try {
-      rawText = await performOCR(imagePath);
+      rawText = await performOCR(effectiveOcrPath);
     } catch (ocrErr) {
       console.warn('Tesseract OCR warning (proceeding with fallback extraction):', ocrErr.message);
     }
 
-    // B. Information Extraction (Supports Gemini Multimodal API if configured)
+    // C. Information Extraction (Supports Gemini Multimodal API if configured)
     const customGeminiKey = req.headers['x-gemini-api-key'] || req.body.geminiApiKey;
     if (customGeminiKey && customGeminiKey.trim().length > 10) {
       setRuntimeGeminiApiKey(customGeminiKey.trim());
     }
-    const extractedInfo = await extractInformation(rawText, imagePath, customGeminiKey);
+    const extractedInfo = await extractInformation(rawText, effectiveOcrPath, customGeminiKey);
 
     const inspectionState = req.body.inspectionState || 'Central (All India)';
     const inspectionDate = req.body.inspectionDate ? new Date(req.body.inspectionDate) : new Date();
 
-    // C. Compliance Evaluation (Dynamic jurisdiction & date versioning)
+    // D. Compliance Evaluation (Dynamic jurisdiction & date versioning)
     const complianceResults = await evaluateCompliance(extractedInfo, {
       inspectionState,
       inspectionDate
     });
 
-    // D. Parallel Execution: Generate Evidence, Font-Size Readability, and Image Quality Concurrently
-    const [enrichedRuleResults, readabilityAssessments, imageQuality] = await Promise.all([
-      attachEvidenceToResults(complianceResults.ruleResults, imagePath),
-      assessDeclarationReadability(imagePath, extractedInfo, null).catch(readErr => {
+    // E. Parallel Execution: Generate Evidence, Font-Size Readability, and Image Quality Concurrently
+    const [enrichedRuleResults, readabilityAssessments, qualityMetrics] = await Promise.all([
+      attachEvidenceToResults(complianceResults.ruleResults, effectiveOcrPath),
+      assessDeclarationReadability(effectiveOcrPath, extractedInfo, null).catch(readErr => {
         console.warn('Readability assessment warning:', readErr.message);
         return [];
       }),
-      assessOverallImageQuality(imagePath).catch(qualityErr => {
-        console.warn('Overall image quality assessment warning:', qualityErr.message);
-        return { isBlurry: false, blurScore: 85, clarityStatus: 'CRISP' };
-      })
+      enhancement.finalQuality
+        ? Promise.resolve(enhancement.finalQuality)
+        : assessOverallImageQuality(imagePath).catch(qualityErr => {
+            console.warn('Overall image quality assessment warning:', qualityErr.message);
+            return { isBlurry: false, blurScore: 85, clarityStatus: 'CRISP' };
+          })
     ]);
+
+    const finalImageQuality = {
+      ...qualityMetrics,
+      isEnhanced: enhancement.isEnhanced,
+      enhancedImagePath: enhancement.enhancedRelativePath,
+      appliedFilters: enhancement.appliedFilters || []
+    };
 
     const legalEnforcementStatus = calculateLegalStatus(enrichedRuleResults);
     const finalRawText = extractedInfo.rawText || rawText;
 
-    // E. Save to Database
+    // F. Save to Database
     const newScan = new Scan({
       userId: req.user?._id !== 'demo_user' ? req.user?._id : undefined,
       inspectorName: req.user?.name || 'Inspector Officer',
@@ -135,6 +154,7 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       inspectionDate: complianceResults.inspectionDate || inspectionDate,
       productCategory: complianceResults.productCategory || extractedInfo.productCategory || 'General Packaged Commodity',
       imagePath: `/uploads/${req.file.filename}`,
+      enhancedImagePath: enhancement.isEnhanced ? enhancement.enhancedRelativePath : null,
       extractedText: finalRawText,
       extractedInfo: extractedInfo,
       ruleResults: enrichedRuleResults,
@@ -147,7 +167,7 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
         referenceDimensionMm: null,
         pixelsPerMm: null
       },
-      imageQuality,
+      imageQuality: finalImageQuality,
       readabilityAssessments
     });
 
@@ -162,7 +182,8 @@ router.post('/', requireAuth, uploadSingle, async (req, res) => {
       ruleResults: enrichedRuleResults,
       legalEnforcementStatus,
       calibration: newScan.calibration,
-      imageQuality,
+      imageQuality: finalImageQuality,
+      enhancedImagePath: enhancement.isEnhanced ? enhancement.enhancedRelativePath : null,
       readabilityAssessments,
       extractedInfo
     });
@@ -349,9 +370,10 @@ router.post('/:id/calibrate', requireAuth, async (req, res) => {
     const scan = await Scan.findById(id);
     if (!scan) return res.status(404).json({ error: 'Scan record not found' });
 
-    let absoluteImagePath = scan.imagePath;
+    const activePath = scan.enhancedImagePath || scan.imagePath;
+    let absoluteImagePath = activePath;
     if (!path.isAbsolute(absoluteImagePath)) {
-      absoluteImagePath = path.join(__dirname, '..', scan.imagePath);
+      absoluteImagePath = path.join(__dirname, '..', activePath);
     }
 
     let calculatedPxPerMm = null;

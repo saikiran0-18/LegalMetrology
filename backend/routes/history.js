@@ -36,6 +36,12 @@ const normalizeScan = (doc) => {
     s.imagePath = resolvedEvidence || '/uploads/default-product.png';
   }
 
+  // 1b. Normalize enhancedImagePath if present
+  if (s.enhancedImagePath) {
+    const enhancedFilename = path.basename(s.enhancedImagePath);
+    s.enhancedImagePath = `/uploads/${enhancedFilename}`;
+  }
+
   return s;
 };
 

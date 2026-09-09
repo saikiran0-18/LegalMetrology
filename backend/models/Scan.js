@@ -8,6 +8,7 @@ const scanSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
   inspectorName: { type: String, default: 'Officer' },
   imagePath: { type: String, required: true },
+  enhancedImagePath: { type: String, default: null },
   extractedText: { type: String, required: false },
   extractedInfo: {
     productName: { type: String, default: 'Not detected' },
@@ -107,7 +108,13 @@ const scanSchema = new mongoose.Schema({
     edgeVariance: { type: Number, default: 50 },
     contrastScore: { type: Number, default: 50 },
     clarityStatus: { type: String, default: 'CRISP' }, // 'CRISP' | 'ACCEPTABLE' | 'MODERATE_BLUR' | 'SEVERE_BLUR'
-    recommendation: { type: String, default: 'Image clarity is sufficient for automated statutory assessment.' }
+    recommendation: { type: String, default: 'Image clarity is sufficient for automated statutory assessment.' },
+    isEnhanced: { type: Boolean, default: false },
+    enhancedImagePath: { type: String, default: null },
+    originalClarityStatus: { type: String, default: null },
+    originalEdgeVariance: { type: Number, default: null },
+    enhancedEdgeVariance: { type: Number, default: null },
+    appliedFilters: { type: [String], default: [] }
   },
   // Declaration Readability & Font-Size Assessment Schema
   readabilityAssessments: [

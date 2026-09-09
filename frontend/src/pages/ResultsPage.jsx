@@ -58,6 +58,9 @@ export default function ResultsPage() {
   const [activeMainTab, setActiveMainTab] = useState('statutory');
   const [selectedReadabilityItem, setSelectedReadabilityItem] = useState(null);
 
+  // AI Image Enhancement & Display Mode ('enhanced' | 'original')
+  const [imageDisplayMode, setImageDisplayMode] = useState('enhanced');
+
   // Evidence Management UI State
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
   const [isEditingText, setIsEditingText] = useState(false);
@@ -598,6 +601,11 @@ export default function ResultsPage() {
     document.body.removeChild(link);
   };
 
+  const hasEnhancedImage = Boolean(scan?.enhancedImagePath || scan?.imageQuality?.isEnhanced);
+  const activeDisplayPath = (hasEnhancedImage && imageDisplayMode === 'enhanced')
+    ? (scan?.enhancedImagePath || scan?.imageQuality?.enhancedImagePath || scan?.imagePath)
+    : scan?.imagePath;
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6 relative transition-colors duration-500">
       <div className="absolute top-[-10%] left-[-5%] w-96 h-96 bg-primary/20 blur-[120px] rounded-full pointer-events-none"></div>
@@ -676,8 +684,71 @@ export default function ResultsPage() {
         )}
       </div>
 
-      {/* Optical Blur & Image Clarity Advisory */}
-      {scan.imageQuality?.isBlurry && (
+      {/* AI Image Deblurring & Enhancement Advisory */}
+      {hasEnhancedImage ? (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-indigo-500/15 border-2 border-emerald-500/40 text-foreground flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg relative z-10 animate-in fade-in duration-200">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-emerald-600 text-white shadow-md shrink-0 mt-0.5">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="text-xs leading-relaxed">
+              <div className="font-black text-sm text-emerald-800 dark:text-emerald-300 mb-0.5 flex flex-wrap items-center gap-2">
+                <span>AI Blur Enhancement Applied</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                  Adaptive De-blur & High-DPI Upscaling
+                </span>
+                {scan.imageQuality?.originalEdgeVariance && scan.imageQuality?.enhancedEdgeVariance && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-500/30">
+                    Clarity: {scan.imageQuality.originalEdgeVariance} &rarr; {scan.imageQuality.enhancedEdgeVariance} (+{Math.round(((scan.imageQuality.enhancedEdgeVariance - scan.imageQuality.originalEdgeVariance) / Math.max(1, scan.imageQuality.originalEdgeVariance)) * 100)}%)
+                  </span>
+                )}
+              </div>
+              <p className="text-muted-foreground">
+                Uploaded packaging photograph suffered from optical or motion blur. The system automatically reconstructed stroke contrast, crisp edges, and dynamic range so statutory declarations (MRP, batch number, date, consumer care) could be reliably recognized.
+              </p>
+              {scan.imageQuality?.appliedFilters && scan.imageQuality.appliedFilters.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {scan.imageQuality.appliedFilters.map((f, i) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-background/80 text-foreground/80 border border-border/50 font-medium">
+                      ✓ {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+            {/* View Mode Switcher */}
+            <div className="p-1 rounded-xl bg-background/80 border border-border flex items-center shadow-inner">
+              <button
+                type="button"
+                onClick={() => setImageDisplayMode('enhanced')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+                  imageDisplayMode === 'enhanced'
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Sparkles className="w-3 h-3" />
+                Enhanced
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageDisplayMode('original')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1",
+                  imageDisplayMode === 'original'
+                    ? "bg-muted text-foreground shadow-sm font-black"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Original
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : scan.imageQuality?.isBlurry ? (
         <div className="p-4 rounded-2xl bg-amber-100/90 border-2 border-amber-400 text-amber-950 flex items-start justify-between gap-4 shadow-md relative z-10 animate-in fade-in duration-200">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
@@ -693,14 +764,14 @@ export default function ResultsPage() {
           </div>
           <button
             type="button"
-            onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Blur Inspection Lightbox')}
+            onClick={() => handleOpenZoom(getImageUrl(activeDisplayPath), 'Blur Inspection Lightbox')}
             className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shrink-0 flex items-center gap-1.5 transition-all shadow-sm"
           >
             <ZoomIn className="w-3.5 h-3.5" />
             Inspect Blur
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Main 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
@@ -715,31 +786,66 @@ export default function ResultsPage() {
                 <ImageIcon className="w-4 h-4 text-primary" />
                 <span className="text-xs font-bold text-foreground">Package Evidence Canvas</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {hasEnhancedImage && (
+                  <div className="p-0.5 rounded-lg bg-black/5 dark:bg-white/5 border border-border/50 flex items-center text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setImageDisplayMode('enhanced')}
+                      className={cn(
+                        "px-2 py-0.5 rounded-md font-bold transition-all flex items-center gap-1",
+                        imageDisplayMode === 'enhanced'
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Show AI-enhanced deblurred packaging"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      Enhanced
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageDisplayMode('original')}
+                      className={cn(
+                        "px-2 py-0.5 rounded-md font-bold transition-all flex items-center gap-1",
+                        imageDisplayMode === 'original'
+                          ? "bg-background text-foreground shadow-xs font-black"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Show raw original uploaded image"
+                    >
+                      Original
+                    </button>
+                  </div>
+                )}
                 {scan.imageQuality && (
                   <span 
                     className={cn(
                       "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border flex items-center gap-1",
-                      scan.imageQuality.clarityStatus === 'CRISP' 
+                      scan.imageQuality.isEnhanced
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                        : scan.imageQuality.clarityStatus === 'CRISP' 
                         ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                         : scan.imageQuality.clarityStatus === 'ACCEPTABLE'
                         ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
                         : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
                     )}
-                    title={`Edge gradient variance: ${scan.imageQuality.edgeVariance || 'N/A'}`}
+                    title={`Edge gradient variance: ${scan.imageQuality.enhancedEdgeVariance || scan.imageQuality.edgeVariance || 'N/A'}`}
                   >
                     <span className={cn(
                       "w-1.5 h-1.5 rounded-full",
+                      scan.imageQuality.isEnhanced ? "bg-emerald-500" :
                       scan.imageQuality.isBlurry ? "bg-amber-500 animate-ping" : "bg-emerald-500"
                     )}></span>
-                    {scan.imageQuality.clarityStatus === 'CRISP' ? 'Sharp' :
+                    {scan.imageQuality.isEnhanced ? 'AI Enhanced' :
+                     scan.imageQuality.clarityStatus === 'CRISP' ? 'Sharp' :
                      scan.imageQuality.clarityStatus === 'ACCEPTABLE' ? 'Clear' :
                      scan.imageQuality.clarityStatus === 'MODERATE_BLUR' ? 'Blurry' : 'Severe Blur'}
                   </span>
                 )}
                 <button
                   type="button"
-                  onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Packaging Evidence Canvas')}
+                  onClick={() => handleOpenZoom(getImageUrl(activeDisplayPath), hasEnhancedImage && imageDisplayMode === 'enhanced' ? 'AI-Enhanced Packaging Canvas' : 'Packaging Evidence Canvas')}
                   className="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-black/5 dark:bg-white/5 hover:bg-primary/20 hover:text-primary text-muted-foreground border border-border/40 shadow-sm"
                   title="Click to zoom image in full screen"
                 >
@@ -765,15 +871,15 @@ export default function ResultsPage() {
             <div className="relative flex justify-center bg-black/5 dark:bg-black/40 rounded-2xl overflow-hidden p-2 min-h-[320px] items-center">
               <div 
                 className="relative inline-block max-w-full cursor-zoom-in group"
-                onClick={() => handleOpenZoom(getImageUrl(scan.imagePath), 'Packaging Evidence Canvas')}
+                onClick={() => handleOpenZoom(getImageUrl(activeDisplayPath), hasEnhancedImage && imageDisplayMode === 'enhanced' ? 'AI-Enhanced Packaging Canvas' : 'Packaging Evidence Canvas')}
                 title="Click image to zoom in"
               >
                 <img 
-                  src={getImageUrl(scan.imagePath)} 
+                  src={getImageUrl(activeDisplayPath)} 
                   alt="Scanned Product Packaging" 
                   className="max-h-96 w-auto object-contain rounded-xl shadow-lg ring-1 ring-border/40 select-none transition-transform duration-200 group-hover:scale-[1.01]"
                   onError={(e) => {
-                    const filename = scan.imagePath ? scan.imagePath.split(/[\/\\]/).pop() : '';
+                    const filename = activeDisplayPath ? activeDisplayPath.split(/[\/\\]/).pop() : '';
                     if (filename && !e.target.dataset.triedRelative) {
                       e.target.dataset.triedRelative = 'true';
                       e.target.src = `/uploads/${filename}`;
