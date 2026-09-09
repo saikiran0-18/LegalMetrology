@@ -3,18 +3,26 @@ const fs = require('fs');
 const sharp = require('sharp');
 const { imageSize } = require('image-size');
 
+const path = require('path');
+
 let cachedWorker = null;
 let workerInitPromise = null;
 
 const getWorker = async () => {
   if (cachedWorker) return cachedWorker;
   if (!workerInitPromise) {
-    workerInitPromise = Tesseract.createWorker('eng')
+    const backendDir = path.join(__dirname, '..');
+    workerInitPromise = Tesseract.createWorker('eng', 1, {
+      langPath: backendDir,
+      cachePath: backendDir,
+      gzip: false
+    })
       .then(w => {
         cachedWorker = w;
         return w;
       })
       .catch(err => {
+        console.warn('Local OCR worker init warning:', err.message);
         workerInitPromise = null;
         cachedWorker = null;
         throw err;

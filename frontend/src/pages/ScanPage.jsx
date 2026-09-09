@@ -100,18 +100,9 @@ export default function ScanPage() {
     formData.append('inspectionState', selectedState);
     formData.append('inspectionDate', new Date(inspectionDate).toISOString());
 
-    const storedGeminiKey = localStorage.getItem('gemini_api_key');
-    if (storedGeminiKey) {
-      formData.append('geminiApiKey', storedGeminiKey);
-    }
-
     try {
-      const headers = { 'Content-Type': 'multipart/form-data' };
-      if (storedGeminiKey) {
-        headers['x-gemini-api-key'] = storedGeminiKey;
-      }
       const response = await axios.post(`${API_URL}/api/scan`, formData, {
-        headers
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       
       clearInterval(progressInterval);
